@@ -1,0 +1,17 @@
+# --- СЕКРЕТЫ --- 
+.env
+*.env
+*.env.local
+
+# --- ЗАВИСИМОСТИ --- 
+node_modules/
+
+# --- ЛОГИ И СГЕНЕРИРОВАННЫЕ ФАЙЛЫ --- 
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# --- ВРЕМЕННЫЕ ФАЙЛЫ --- 
+*.tmp
+*.swp
