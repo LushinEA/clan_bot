@@ -2,6 +2,7 @@ const embeds = require('../components/embeds/clanCreationEmbeds');
 const modals = require('../components/modals/clanCreationModals');
 const { getClansCollection } = require('../utils/database');
 const { handleInteractionError } = require('../utils/errorHandler');
+const config = require('../config');
 
 // Хранение данных пользователей в памяти на время сессии регистрации
 const registrationSessions = new Map();
@@ -12,9 +13,7 @@ async function start(interaction) {
         await interaction.reply({ content: 'Вы уже находитесь в процессе создания клана.', ephemeral: true });
         return;
     }
-
     registrationSessions.set(userId, { step: 1, data: {}, startTime: Date.now() });
-    
     const reply = embeds.createStep1Embed(interaction);
     await interaction.reply(reply);
 }
@@ -23,7 +22,6 @@ async function handleButton(interaction) {
     const userId = interaction.user.id;
     const session = registrationSessions.get(userId);
     
-    // Проверка на истекшую сессию
     if (!session && interaction.customId !== 'clan_create_start') {
         console.warn(`Пользователь ${interaction.user.tag} нажал кнопку "${interaction.customId}", но его сессия не найдена (возможно, истекла).`);
         await interaction.reply({ content: '⏳ Ваша сессия создания клана истекла. Пожалуйста, начните заново, нажав на главную кнопку.', ephemeral: true });
@@ -47,7 +45,7 @@ async function handleButton(interaction) {
                 await interaction.showModal(modals.createAdditionalModal());
                 break;
             case 'clan_create_confirm':
-                await submitClanApplication(interaction, session);
+                await submitAndCreateClan(interaction, session); 
                 registrationSessions.delete(userId);
                 break;
             case 'clan_create_edit':
@@ -63,13 +61,11 @@ async function handleModalSubmit(interaction) {
     const userId = interaction.user.id;
     const session = registrationSessions.get(userId);
 
-    // Проверка на истекшую сессию
     if (!session) {
         console.warn(`Пользователь ${interaction.user.tag} отправил модальное окно "${interaction.customId}", но его сессия не найдена.`);
         await interaction.reply({ content: '⏳ Ваша сессия создания клана истекла. Пожалуйста, начните заново.', ephemeral: true });
         return;
     }
-
     try {
         await interaction.deferUpdate();
         
@@ -117,35 +113,52 @@ async function editClanData(interaction, session) {
     }, 2000);
 }
 
-async function submitClanApplication(interaction, session) {
+async function submitAndCreateClan(interaction, session) {
+    // 1. Создание роли
+    let newRole;
+    try {
+        newRole = await interaction.guild.roles.create({
+            name: session.data.tag,
+            color: session.data.color,
+            mentionable: false,
+            reason: `Автоматическое создание роли для клана ${session.data.name}`
+        });
+        console.log(`✅ Роль [${newRole.name}] успешно создана для клана ${session.data.name}.`);
+    } catch (error) {
+        console.error('❌ Ошибка при создании роли:', error);
+        await interaction.update({ content: 'Не удалось создать роль. Проверьте права бота (у него должна быть роль с правом "Управление ролями" выше создаваемой) и корректность HEX-кода цвета.', embeds: [], components: [], ephemeral: true });
+        return;
+    }
+
+    // 2. Подготовка данных для БД
     const clansCollection = getClansCollection();
     const clanData = {
         ...session.data,
-        status: 'pending', // на рассмотрении
+        status: 'approved',
+        roleId: newRole.id,
         creatorId: interaction.user.id,
         creatorTag: interaction.user.tag,
+        guildId: interaction.guild.id,
         createdAt: new Date(),
     };
 
-    // Сохраняем в базу данных
+    // 3. Сохранение в базу данных
     await clansCollection.insertOne(clanData);
 
-    // Отправка в канал для ревью
-    const reviewChannelId = require('../config').REVIEW_CHANNEL_ID;
-    if (!reviewChannelId) {
-        console.warn('ПРЕДУПРЕЖДЕНИЕ: REVIEW_CHANNEL_ID не указан в config.js. Заявка не будет отправлена на ревью.');
-    } else {
+    // 4. Отправка лога в канал для админов
+    const reviewChannelId = config.REVIEW_CHANNEL_ID;
+    if (reviewChannelId) {
         try {
             const reviewChannel = await interaction.guild.channels.fetch(reviewChannelId);
-            const reviewEmbed = embeds.createReviewEmbed(interaction, session);
-            await reviewChannel.send(reviewEmbed);
+            const logMessage = embeds.createLogEmbed(interaction, session, newRole); // Вызов изменен
+            await reviewChannel.send(logMessage);
         } catch (error) {
-            console.error(`!! Ошибка отправки заявки в канал для ревью (ID: ${reviewChannelId}). Проверьте ID канала и права бота.`);
-            console.error(error);
+            console.error(`!! Ошибка отправки лога в канал (ID: ${reviewChannelId}).`, error);
         }
     }
 
-    await interaction.update(embeds.createSuccessEmbed(interaction, session.data));
+    // 5. Отправка сообщения об успехе пользователю
+    await interaction.update(embeds.createSuccessEmbed(interaction, session.data, newRole));
 }
 
 module.exports = {

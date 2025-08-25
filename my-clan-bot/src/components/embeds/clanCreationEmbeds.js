@@ -55,7 +55,7 @@ function createStep1Embed(interaction) {
 function createStep2Embed(interaction, data) {
     const embed = new EmbedBuilder()
         .setTitle(`${EMOJIS.CROWN} ШАГ 2/4: РУКОВОДСТВО`)
-        .setDescription(`${createProgressBar(2, 4)}\n\nКлан **[${data.tag}] ${data.name}** нуждается в сильных лидерах.`)
+        .setDescription(`${createProgressBar(2, 4)}\n\nКлан **${data.tag} ${data.name}** нуждается в сильных лидерах.`) 
         .setColor(COLORS.GOLD)
         .addFields(
             { name: 'Глава клана', value: 'Главный командир и стратег.', inline: true },
@@ -75,7 +75,7 @@ function createStep2Embed(interaction, data) {
 function createStep3Embed(interaction, data) {
     const embed = new EmbedBuilder()
         .setTitle(`${EMOJIS.SHIELD} ШАГ 3/4: СОСТАВ КЛАНА`)
-        .setDescription(`${createProgressBar(3, 4)}\n\nВремя собрать команду для клана **[${data.tag}] ${data.name}**.`)
+        .setDescription(`${createProgressBar(3, 4)}\n\nВремя собрать команду для клана **${data.tag} ${data.name}**.`)
         .setColor(COLORS.WARNING)
         .addFields(
             { name: 'Список участников', value: 'Перечислите всех, кто будет в клане.', inline: true },
@@ -95,7 +95,7 @@ function createStep3Embed(interaction, data) {
 function createStep4Embed(interaction, data) {
     const embed = new EmbedBuilder()
         .setTitle(`${EMOJIS.MAGIC} ШАГ 4/4: ДОПОЛНИТЕЛЬНО`)
-        .setDescription(`${createProgressBar(4, 4)}\n\nПоследние штрихи для клана **[${data.tag}] ${data.name}**.`)
+        .setDescription(`${createProgressBar(4, 4)}\n\nПоследние штрихи для клана **${data.tag} ${data.name}**.`)
         .setColor(COLORS.PREMIUM)
         .addFields(
             { name: 'Активность', value: 'Укажите время и часовой пояс.', inline: true },
@@ -114,10 +114,10 @@ function createStep4Embed(interaction, data) {
 
 function createFinalConfirmationEmbed(interaction, session) {
     const { data, startTime } = session;
-    const timeSpent = Math.round((Date.now() - startTime) / 60000); // в минутах
+    const timeSpent = Math.round((Date.now() - startTime) / 60000); 
 
     const embed = new EmbedBuilder()
-        .setTitle(`${EMOJIS.CLAN} **[${data.tag}] ${data.name}** | ПРЕДПРОСМОТР`)
+        .setTitle(`${EMOJIS.CLAN} **${data.tag} ${data.name}** | ПРЕДПРОСМОТР`) 
         .setDescription(`**Описание:**\n${data.description}\n\n*Заявка заполнена за ~${timeSpent} мин.*`)
         .setColor(data.color.startsWith('#') ? data.color : `#${data.color}`)
         .addFields(
@@ -145,13 +145,16 @@ function createFinalConfirmationEmbed(interaction, session) {
     return { content: `**Ваша заявка почти готова!**`, embeds: [embed], components: [buttons], ephemeral: true };
 }
 
-function createSuccessEmbed(interaction, data) {
+function createSuccessEmbed(interaction, data, newRole) {
     const embed = new EmbedBuilder()
-        .setTitle(`${EMOJIS.SPARKLES} ЗАЯВКА УСПЕШНО ОТПРАВЛЕНА!`)
-        .setDescription(`Заявка на создание клана **[${data.tag}] ${data.name}** принята на рассмотрение.\n\nАдминистрация уведомит вас о решении в течение 24 часов.`)
+        .setTitle(`${EMOJIS.SPARKLES} КЛАН УСПЕШНО СОЗДАН!`)
+        .setDescription(
+            `Ваш клан **${data.tag} ${data.name}** был успешно зарегистрирован в системе.\n\n` + 
+            `✅ Роль <@&${newRole.id}> была автоматически создана для вашего клана.`
+            )
         .setColor(COLORS.SUCCESS)
         .setTimestamp()
-        .setFooter({ text: `Спасибо за вашу заявку!`, iconURL: interaction.guild.iconURL() });
+        .setFooter({ text: `Поздравляем с созданием клана!`, iconURL: interaction.guild.iconURL() });
     return { content: '', embeds: [embed], components: [] };
 }
 
@@ -163,21 +166,33 @@ function createEditModeEmbed() {
     return { content: '', embeds: [embed], components: [], ephemeral: true };
 }
 
-function createReviewEmbed(interaction, session) {
+function createLogEmbed(interaction, session, newRole) {
     const { data } = session;
     const embed = new EmbedBuilder()
-        .setTitle(`Новая заявка на клан: [${data.tag}] ${data.name}`)
-        .setAuthor({ name: `От пользователя: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
-        .setColor(data.color.startsWith('#') ? data.color : `#${data.color}`)
-        .addFields(
-            { name: 'Руководство', value: `**Глава:** ${data.leader}\n**Зам:** ${data.deputy}` },
-            { name: 'Состав', value: `**Участников:** ${data.memberCount}\n**Список:**\n${data.members}` },
-            { name: 'Описание', value: data.description },
-            { name: 'Активность', value: `${data.activityTime} (${data.timezone})` },
-            { name: 'Специализация', value: data.specialties }
+        .setAuthor({ name: `Инициатор: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+        .setTitle(`✅ Авто-создание клана`)
+        .setDescription(
+            `**Тег:** ${data.tag}\n` +
+            `**Название:** ${data.name}\n` +
+            `**Созданная роль:** <@&${newRole.id}>`
         )
+        .setColor(COLORS.SUCCESS)
+        .addFields(
+            { name: `${EMOJIS.PENCIL} Описание клана`, value: `>>> ${data.description}` },
+            { name: `${EMOJIS.CROWN} Руководство`, value: `**Глава:** ${data.leader}\n**Заместитель:** ${data.deputy}`, inline: true },
+            { name: `${EMOJIS.SHIELD} Состав`, value: `**Всего:** ${data.memberCount} участников`, inline: true },
+            { name: `${EMOJIS.FIRE} Активность`, value: `**Время:** ${data.activityTime} (${data.timezone})`, inline: true },
+            { name: `${EMOJIS.STAR} Опыт главы`, value: `>>> ${data.experience}` },
+            { name: `${EMOJIS.SWORD} Специализация`, value: `>>> ${data.specialties}` },
+            { name: `${EMOJIS.USERS} Список участников`, value: `\`\`\`\n${data.members}\n\`\`\`` }
+        )
+        .setFooter({ text: `ID Заявителя: ${interaction.user.id}` })
         .setTimestamp();
-    if (data.emblem) embed.setThumbnail(data.emblem);
+
+    if (data.emblem) {
+        embed.setThumbnail(data.emblem);
+    }
+
     return { embeds: [embed] };
 }
 
@@ -190,5 +205,5 @@ module.exports = {
     createFinalConfirmationEmbed,
     createSuccessEmbed,
     createEditModeEmbed,
-    createReviewEmbed,
+    createLogEmbed,
 };
