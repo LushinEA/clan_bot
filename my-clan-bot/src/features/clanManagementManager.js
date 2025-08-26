@@ -4,6 +4,7 @@ const { handleInteractionError } = require('../utils/errorHandler');
 const modals = require('../components/modals/clanManagementModals');
 const config = require('../config');
 const { updateInsigniaPanel, updateClanMessages } = require('./insigniaManager');
+const { validateUniqueness, validateRosterMembers } = require('../utils/validationHelper');
 
 
 async function handleButton(interaction) {
@@ -77,13 +78,21 @@ async function processInfoEdit(interaction, clan, collection) {
     const newColor = '#' + interaction.fields.getTextInputValue('clan_color').toUpperCase();
     const newServer = interaction.fields.getTextInputValue('clan_server');
 
-    // Валидация
+    // Валидация формата
     if (!/^[0-9A-F]{6}$/i.test(newColor.replace('#', ''))) {
         return interaction.editReply({ content: '❌ Неверный формат HEX-кода цвета.' });
     }
      if (!Object.keys(config.SERVERS).includes(newServer)) {
         return interaction.editReply({ content: '❌ Неверный номер сервера.' });
     }
+    
+    // --- ПРОВЕРКА: Уникальность, исключая текущий клан ---
+    const uniquenessCheck = await validateUniqueness({ tag: newTag, name: newName, color: newColor }, clan._id);
+    if (!uniquenessCheck.isValid) {
+        await interaction.editReply({ content: uniquenessCheck.message });
+        return;
+    }
+    // --- КОНЕЦ ПРОВЕРКИ ---
     
     // Обновляем роль в Discord
     await interaction.guild.roles.edit(clan.roleId, {
@@ -107,6 +116,15 @@ async function processInfoEdit(interaction, clan, collection) {
 
 async function processRosterEdit(interaction, clan, collection) {
     const newRosterText = interaction.fields.getTextInputValue('clan_roster');
+
+    // --- ПРОВЕРКА: Участники не должны состоять в других кланах ---
+    const rosterCheck = await validateRosterMembers(newRosterText, clan._id);
+    if (!rosterCheck.isValid) {
+        await interaction.editReply({ content: rosterCheck.message });
+        return;
+    }
+    // --- КОНЕЦ ПРОВЕРКИ ---
+
     const oldRosterLines = clan.roster ? clan.roster.split('\n').filter(l => l.trim()) : [];
     const newRosterLines = newRosterText ? newRosterText.split('\n').filter(l => l.trim()) : [];
 

@@ -5,11 +5,24 @@ const { getClansCollection } = require('../utils/database');
 const { handleInteractionError } = require('../utils/errorHandler');
 const config = require('../config');
 const { updateInsigniaPanel } = require('./insigniaManager');
+const { findUserClan, validateUniqueness, validateRosterMembers } = require('../utils/validationHelper');
 
 const registrationSessions = new Map();
 
 async function start(interaction) {
     const userId = interaction.user.id;
+
+    // --- ПРОВЕРКА: Состоит ли пользователь уже в клане ---
+    const userClan = await findUserClan({ discordId: userId });
+    if (userClan) {
+        await interaction.reply({
+            content: `🛡️ Вы не можете создать новый клан, так как уже состоите в клане **\`${userClan.tag}\` ${userClan.name}**.`,
+            flags: [MessageFlags.Ephemeral]
+        });
+        return;
+    }
+    // --- КОНЕЦ ПРОВЕРКИ ---
+
     if (registrationSessions.has(userId)) {
         await interaction.reply({ content: 'Вы уже находитесь в процессе создания клана.', flags: [MessageFlags.Ephemeral] });
         return;
@@ -91,7 +104,14 @@ async function handleModalSubmit(interaction) {
                     });
                     return;
                 }
-                // --- КОНЕЦ ВАЛИДАЦИИ ---
+
+                // --- ПРОВЕРКА: Уникальность тега, имени и цвета ---
+                const uniquenessCheck = await validateUniqueness({ tag, name, color: '#' + color.toUpperCase() });
+                if (!uniquenessCheck.isValid) {
+                    await interaction.followUp({ content: uniquenessCheck.message, flags: [MessageFlags.Ephemeral] });
+                    return;
+                }
+                // --- КОНЕЦ ПРОВЕРКИ ---
 
                 session.data.tag = tag;
                 session.data.name = name;
@@ -99,6 +119,7 @@ async function handleModalSubmit(interaction) {
                 session.data.server = server;
                 
                 if (session.isEditing) {
+                    session.step = 2;
                     await interaction.editReply(embeds.createStep2Embed(interaction, session.data));
                 } else {
                     session.step = 2;
@@ -109,8 +130,9 @@ async function handleModalSubmit(interaction) {
             case 'clan_create_step2_modal': {
                 const leaderNick = interaction.fields.getTextInputValue('leader_nick');
                 const leaderSteamId = interaction.fields.getTextInputValue('leader_steamid');
+                const leaderDiscordId = interaction.user.id;
 
-                // --- ВАЛИДАЦИЯ ---
+                // --- ВАЛИДАЦИЯ ФОРМАТА SteamID64 ---
                 const steamIdRegex = /^\d{17}$/;
                 if (!steamIdRegex.test(leaderSteamId)) {
                      await interaction.followUp({ 
@@ -119,13 +141,26 @@ async function handleModalSubmit(interaction) {
                     });
                     return;
                 }
-                // --- КОНЕЦ ВАЛИДАЦИИ ---
+
+                // --- ПРОВЕРКА: Не состоит ли SteamID или Discord ID главы в другом клане ---
+                // Здесь мы проверяем, не занят ли указанный SteamID или Discord ID текущего пользователя
+                // в *любом* другом клане (не только тем, который он создает, что очевидно).
+                const existingLeaderClan = await findUserClan({ discordId: leaderDiscordId, steamId: leaderSteamId });
+                if (existingLeaderClan) {
+                    await interaction.followUp({
+                        content: `❌ **Ошибка!** Ваш Discord ID (<@${leaderDiscordId}>) или SteamID (\`${leaderSteamId}\`) уже зарегистрированы в клане **\`${existingLeaderClan.tag}\` ${existingLeaderClan.name}**. Чтобы создать новый клан, вы должны сначала покинуть текущий.`,
+                        flags: [MessageFlags.Ephemeral]
+                    });
+                    return;
+                }
+                // --- КОНЕЦ НОВОЙ ПРОВЕРКИ ---
 
                 session.data.leader_nick = leaderNick;
                 session.data.leader_steamid = leaderSteamId;
-                session.data.leader_discordid = interaction.user.id;
+                session.data.leader_discordid = leaderDiscordId;
 
                 if (session.isEditing) {
+                    session.step = 3;
                     await interaction.editReply(embeds.createStep3Embed(interaction, session.data));
                 } else {
                     session.step = 3;
@@ -136,7 +171,7 @@ async function handleModalSubmit(interaction) {
             case 'clan_create_step3_modal': {
                 const roster = interaction.fields.getTextInputValue('clan_roster');
 
-                // --- УСИЛЕННАЯ ВАЛИДАЦИЯ СОСТАВА ---
+                // --- УСИЛЕННАЯ ВАЛИДАЦИЯ ФОРМАТА СОСТАВА ---
                 const lines = roster.split('\n').filter(line => line.trim() !== '');
                 const steamIdRegex = /^\d{17}$/;
                 const discordIdRegex = /^\d{17,19}$/;
@@ -153,7 +188,7 @@ async function handleModalSubmit(interaction) {
                         return;
                     }
 
-                    const [nick, steamId, discordId] = parts;
+                    const [, steamId, discordId] = parts;
 
                     if (!steamIdRegex.test(steamId)) {
                         await interaction.followUp({ 
@@ -171,7 +206,16 @@ async function handleModalSubmit(interaction) {
                         return;
                     }
                 }
-                // --- КОНЕЦ ВАЛИДАЦИИ ---
+                
+                // --- ПРОВЕРКА: Членство участников в других кланах ---
+                // Здесь проверяем, что ни один из добавленных участников не состоит уже в другом клане.
+                // Передаем `null` для `clanIdToExclude`, так как это создание нового клана.
+                const rosterCheck = await validateRosterMembers(roster);
+                if (!rosterCheck.isValid) {
+                    await interaction.followUp({ content: rosterCheck.message, flags: [MessageFlags.Ephemeral] });
+                    return;
+                }
+                // --- КОНЕЦ ПРОВЕРКИ ---
 
                 session.data.roster = roster;
 

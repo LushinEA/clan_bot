@@ -6,6 +6,7 @@ const embeds = require('../components/embeds/clanCreationEmbeds');
 const insigniaEmbeds = require('../components/embeds/insigniaEmbeds');
 const config = require('../config');
 const { getState } = require('../utils/stateManager');
+const { findUserClan } = require('../utils/validationHelper');
 
 async function handleSelect(interaction) {
     const clanRoleId = interaction.values[0];
@@ -51,6 +52,16 @@ async function handleModal(interaction) {
             });
             return;
         }
+
+        // --- ПРОВЕРКА: Состоит ли пользователь (по Discord ID или SteamID) уже в клане ---
+        const existingClan = await findUserClan({ discordId, steamId });
+        if (existingClan) {
+            await interaction.editReply({
+                content: `❌ **Ошибка!** Вы (или пользователь с указанным SteamID: \`${steamId}\`) уже состоите в клане **\`${existingClan.tag}\` ${existingClan.name}**.`,
+            });
+            return;
+        }
+        // --- КОНЕЦ ПРОВЕРКИ ---
 
         const clansCollection = getClansCollection();
         const clan = await clansCollection.findOne({ roleId: clanRoleId, guildId: interaction.guildId });
