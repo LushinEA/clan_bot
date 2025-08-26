@@ -18,10 +18,6 @@ module.exports = {
             const clansCollection = getClansCollection();
             const clans = await clansCollection.find({ status: 'approved' }).sort({ tag: 1 }).toArray();
 
-            if (clans.length === 0) {
-                return message.reply({ content: 'На сервере еще нет зарегистрированных кланов для создания панели.' });
-            }
-
             const messageData = createInsigniaEmbed(clans);
             const panelMessage = await message.channel.send(messageData);
             

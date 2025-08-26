@@ -26,21 +26,22 @@ function createMainEmbed() {
     const bannerAttachment = new AttachmentBuilder(bannerPath, { name: 'banner_LVA.jpg' });
 
     const embed = new EmbedBuilder()
-        .setTitle(`${EMOJIS.CLAN} **СИСТЕМА РЕГИСТРАЦИИ КЛАНОВ** ${EMOJIS.SPARKLES}`)
+        .setTitle(`${EMOJIS.CLAN} **СИСТЕМА РЕГИСТРАЦИИ И УПРАВЛЕНИЯ КЛАНАМИ** ${EMOJIS.SPARKLES}`)
         .setColor(COLORS.PREMIUM)
         .setDescription(
-            `Добро пожаловать в автоматизированную систему создания клана! Процесс состоит из нескольких шагов и займет пару минут.\n\n` +
-            `${EMOJIS.PENCIL} **Перед тем как нажать кнопку, пожалуйста, ознакомьтесь с требованиями и подготовьте всю необходимую информацию.**`
+            `Добро пожаловать в автоматизированную систему кланов!\n\n` +
+            `**${EMOJIS.ROCKET} Новые пользователи:** Нажмите кнопку ниже, чтобы начать процесс регистрации вашего клана.\n` +
+            `**${EMOJIS.CROWN} Лидеры кланов:** Используйте кнопки управления для редактирования информации или состава вашего клана.`
         )
         .addFields(
             {
-                name: '✅ ТРЕБОВАНИЯ К КЛАНУ',
+                name: '✅ ТРЕБОВАНИЯ К КЛАНУ (при регистрации)',
                 value: '>>> • **Минимальный состав:** `5` активных участников (включая главу).\n' +
                        '• **Уникальность:** Название, тег и HEX-код цвета не должны дублировать уже существующие кланы.',
                 inline: false
             },
             {
-                name: '📋 ЧТО НУЖНО ПОДГОТОВИТЬ',
+                name: '📋 ЧТО НУЖНО ПОДГОТОВИТЬ ДЛЯ РЕГИСТРАЦИИ',
                 value: '**1. Общая информация:**\n' +
                        '> • Полное название и короткий тег (2-7 симв.)\n' +
                        '> • HEX-код цвета для роли (например, `FF5733`)\n' +
@@ -56,18 +57,38 @@ function createMainEmbed() {
                 inline: false
             }
         )
-        .setFooter({ text: 'Когда все данные будут готовы, нажмите кнопку ниже.' })
+        .setFooter({ text: 'Выберите необходимое действие' })
         .setImage('attachment://banner_LVA.jpg'); 
 
-    const button = new ActionRowBuilder().addComponents(
+    // Кнопка для регистрации
+    const registrationRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId('clan_create_start')
             .setLabel(`${EMOJIS.ROCKET} НАЧАТЬ РЕГИСТРАЦИЮ`)
-            .setStyle(ButtonStyle.Primary)
+            .setStyle(ButtonStyle.Success)
     );
+
+    // Кнопки для управления кланом (только для лидеров)
+    const managementRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('clan_manage_edit_info')
+            .setLabel('Изменить инфо')
+            .setEmoji(EMOJIS.PENCIL)
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId('clan_manage_edit_roster')
+            .setLabel('Редактировать состав')
+            .setEmoji(EMOJIS.USERS)
+            .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+            .setCustomId('clan_manage_delete')
+            .setLabel('Расформировать клан')
+            .setStyle(ButtonStyle.Danger)
+    );
+
     return { 
         embeds: [embed], 
-        components: [button], 
+        components: [registrationRow, managementRow], 
         files: [bannerAttachment] 
     };
 }

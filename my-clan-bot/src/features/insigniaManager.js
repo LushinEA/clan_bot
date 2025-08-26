@@ -265,4 +265,5 @@ module.exports = {
     handleModal,
     handleLeave,
     updateInsigniaPanel,
+    updateClanMessages,
 };
