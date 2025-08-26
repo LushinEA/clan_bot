@@ -246,7 +246,6 @@ async function submitAndCreateClan(interaction, session) {
     }
 
     // --- Логика выдачи ролей ---
-
     // 1. Выдать роль "Лидер клана"
     try {
         const leaderRole = await interaction.guild.roles.fetch(config.ROLES.CLAN_LEADER_ID);
@@ -285,16 +284,16 @@ async function submitAndCreateClan(interaction, session) {
     await Promise.allSettled(rolePromises);
     console.log(`[РЕГИСТРАЦИЯ КЛАНА] Роль "${newRole.name}" выдана ${successCount} участникам. Не найдено на сервере: ${failCount}.`);
 
-
-    const clansCollection = getClansCollection();
-    const clanData = { ...session.data, status: 'approved', roleId: newRole.id, creatorId: interaction.user.id, creatorTag: interaction.user.tag, guildId: interaction.guild.id, createdAt: new Date(), };
-    await clansCollection.insertOne(clanData);
+    // Объявляем переменные для ID сообщений
+    let logMessageId = null;
+    let registryMessageId = null;
 
     const reviewChannelId = config.REVIEW_CHANNEL_ID;
     if (reviewChannelId) {
         try {
             const reviewChannel = await interaction.guild.channels.fetch(reviewChannelId);
-            await reviewChannel.send(embeds.createLogEmbed(interaction, session, newRole));
+            const logMessage = await reviewChannel.send(embeds.createLogEmbed(interaction.user, session.data, newRole));
+            logMessageId = logMessage.id;
         } catch (error) { console.error(`!! Ошибка отправки лога в канал (ID: ${reviewChannelId}).`, error); }
     }
     
@@ -303,13 +302,28 @@ async function submitAndCreateClan(interaction, session) {
     if (registryChannelId) {
         try {
             const registryChannel = await interaction.guild.channels.fetch(registryChannelId);
-            const registryEmbed = embeds.createRegistryEmbed(clanData);
-            await registryChannel.send({ embeds: [registryEmbed] });
+            const registryEmbed = embeds.createRegistryEmbed(session.data);
+            const registryMessage = await registryChannel.send({ embeds: [registryEmbed] });
+            registryMessageId = registryMessage.id;
         } catch (error) {
             console.error(`!! Ошибка отправки сообщения в реестр кланов (ID: ${registryChannelId}).`, error);
         }
     }
-    // --- Конец блока публикации ---
+    
+    // Сохраняем все данные, включая ID сообщений
+    const clansCollection = getClansCollection();
+    const clanData = { 
+        ...session.data, 
+        status: 'approved', 
+        roleId: newRole.id, 
+        creatorId: interaction.user.id, 
+        creatorTag: interaction.user.tag, 
+        guildId: interaction.guild.id, 
+        createdAt: new Date(),
+        logMessageId: logMessageId,
+        registryMessageId: registryMessageId,
+    };
+    await clansCollection.insertOne(clanData);
     
     await interaction.editReply({ ...embeds.createSuccessEmbed(interaction, session.data, newRole), flags: [MessageFlags.Ephemeral] });
 }
