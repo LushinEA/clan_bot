@@ -245,8 +245,11 @@ async function submitAndCreateClan(interaction, session) {
         return;
     }
 
+    // --- Добавляем ВСЕ необходимые данные в сессию ДО создания embed'ов ---
+    session.data.roleId = newRole.id;
+    session.data.createdAt = new Date();
+
     // --- Логика выдачи ролей ---
-    // 1. Выдать роль "Лидер клана"
     try {
         const leaderRole = await interaction.guild.roles.fetch(config.ROLES.CLAN_LEADER_ID);
         if (leaderRole) {
@@ -258,8 +261,7 @@ async function submitAndCreateClan(interaction, session) {
         console.warn(`[ПРЕДУПРЕЖДЕНИЕ] Не удалось выдать роль лидера клана пользователю ${interaction.user.tag}.`, error);
     }
     
-    // 2. Собрать всех участников и выдать им новую роль клана
-    const memberIds = new Set([interaction.user.id]); // Начинаем с лидера
+    const memberIds = new Set([interaction.user.id]);
     const rosterLines = session.data.roster.split('\n').filter(l => l.trim());
     for (const line of rosterLines) {
         const parts = line.split(',').map(p => p.trim());
@@ -284,7 +286,6 @@ async function submitAndCreateClan(interaction, session) {
     await Promise.allSettled(rolePromises);
     console.log(`[РЕГИСТРАЦИЯ КЛАНА] Роль "${newRole.name}" выдана ${successCount} участникам. Не найдено на сервере: ${failCount}.`);
 
-    // Объявляем переменные для ID сообщений
     let logMessageId = null;
     let registryMessageId = null;
 
@@ -297,7 +298,6 @@ async function submitAndCreateClan(interaction, session) {
         } catch (error) { console.error(`!! Ошибка отправки лога в канал (ID: ${reviewChannelId}).`, error); }
     }
     
-    // --- Публикация в общедоступном реестре ---
     const registryChannelId = config.CHANNELS.CLAN_REGISTRY;
     if (registryChannelId) {
         try {
@@ -310,16 +310,13 @@ async function submitAndCreateClan(interaction, session) {
         }
     }
     
-    // Сохраняем все данные, включая ID сообщений
     const clansCollection = getClansCollection();
     const clanData = { 
         ...session.data, 
         status: 'approved', 
-        roleId: newRole.id, 
         creatorId: interaction.user.id, 
         creatorTag: interaction.user.tag, 
         guildId: interaction.guild.id, 
-        createdAt: new Date(),
         logMessageId: logMessageId,
         registryMessageId: registryMessageId,
     };

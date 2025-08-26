@@ -7,6 +7,13 @@ const config = require('../config');
 
 async function handleSelect(interaction) {
     const clanRoleId = interaction.values[0];
+
+    // Обработка пункта-заглушки
+    if (clanRoleId === 'insignia_reset_selection') {
+        await interaction.reply({ content: 'Выбор сброшен.', flags: [MessageFlags.Ephemeral] });
+        return;
+    }
+
     const clansCollection = getClansCollection();
 
     // Проверка, есть ли у пользователя уже роль какого-либо клана
@@ -81,12 +88,120 @@ async function handleModal(interaction) {
     }
 }
 
+async function handleLeave(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        const clansCollection = getClansCollection();
+        const allClans = await clansCollection.find({ guildId: interaction.guildId }).toArray();
+        const userClan = allClans.find(clan => interaction.member.roles.cache.has(clan.roleId));
+
+        if (!userClan) {
+            await interaction.editReply({ content: '🛡️ Вы не состоите ни в одном клане.' });
+            return;
+        }
+
+        const isLeader = userClan.creatorId === interaction.user.id;
+
+        if (isLeader) {
+            await handleLeaderLeave(interaction, userClan, clansCollection);
+        } else {
+            await handleMemberLeave(interaction, userClan, clansCollection);
+        }
+
+    } catch (error) {
+        await handleInteractionError(error, interaction, 'insigniaManager.handleLeave');
+    }
+}
+
+async function handleMemberLeave(interaction, clan, collection) {
+    const updatedRoster = clan.roster.split('\n').filter(line => !line.includes(interaction.user.id)).join('\n');
+    
+    await collection.updateOne({ _id: clan._id }, { $set: { roster: updatedRoster } });
+    await interaction.member.roles.remove(clan.roleId).catch(e => console.error(`Не удалось снять роль ${clan.roleId} с ${interaction.user.tag}`, e));
+
+    const updatedClanData = await collection.findOne({ _id: clan._id });
+    await updateClanMessages(interaction.client, updatedClanData);
+
+    await interaction.editReply({ content: `✅ Вы успешно покинули клан **\`${clan.tag}\` ${clan.name}**.` });
+}
+
+async function handleLeaderLeave(interaction, clan, collection) {
+    const rosterLines = clan.roster ? clan.roster.split('\n').filter(l => l.trim()) : [];
+
+    let newLeaderMember = null;
+    let newLeaderData = {};
+    let newLeaderIndex = -1;
+
+    // Ищем преемника, который есть на сервере
+    for (let i = 0; i < rosterLines.length; i++) {
+        const line = rosterLines[i];
+        const parts = line.split(',').map(p => p.trim());
+        if (parts.length < 3) continue;
+
+        const discordId = parts[2];
+        const potentialMember = await interaction.guild.members.fetch(discordId).catch(() => null);
+
+        if (potentialMember) {
+            newLeaderMember = potentialMember;
+            newLeaderData = { nick: parts[0], steamId: parts[1], discordId: parts[2] };
+            newLeaderIndex = i;
+            break;
+        }
+    }
+
+    // --- Сценарий 1: Преемник не найден (ростер пуст или все из ростера вышли с сервера). Клан расформировывается. ---
+    if (!newLeaderMember) {
+        await interaction.guild.roles.delete(clan.roleId).catch(e => console.error(`Не удалось удалить роль клана ${clan.tag}`, e));
+        
+        if (clan.registryMessageId) {
+            const registryChannel = await interaction.client.channels.fetch(config.CHANNELS.CLAN_REGISTRY).catch(() => null);
+            if (registryChannel) await registryChannel.messages.delete(clan.registryMessageId).catch(() => {});
+        }
+        if (clan.logMessageId) {
+            const logChannel = await interaction.client.channels.fetch(config.REVIEW_CHANNEL_ID).catch(() => null);
+            if (logChannel) await logChannel.messages.delete(clan.logMessageId).catch(() => {});
+        }
+
+        await collection.deleteOne({ _id: clan._id });
+        await interaction.member.roles.remove(config.ROLES.CLAN_LEADER_ID).catch(() => {});
+
+        await interaction.editReply({ content: `✅ Вы были последним активным участником. Клан **\`${clan.tag}\` ${clan.name}** был успешно расформирован.` });
+        return;
+    }
+
+    // --- Сценарий 2: Преемник найден. Передаем лидерство. ---
+    rosterLines.splice(newLeaderIndex, 1);
+    
+    const updatedClanDBData = {
+        roster: rosterLines.join('\n'),
+        creatorId: newLeaderMember.id,
+        creatorTag: newLeaderMember.user.tag,
+        leader_discordid: newLeaderMember.id,
+        leader_nick: newLeaderData.nick,
+        leader_steamid: newLeaderData.steamId,
+    };
+    await collection.updateOne({ _id: clan._id }, { $set: updatedClanDBData });
+    
+    // Переназначаем роли
+    await interaction.member.roles.remove(clan.roleId).catch(() => {});
+    await interaction.member.roles.remove(config.ROLES.CLAN_LEADER_ID).catch(() => {});
+    await newLeaderMember.roles.add(config.ROLES.CLAN_LEADER_ID).catch(() => {});
+    
+    const finalClanData = await collection.findOne({ _id: clan._id });
+    await updateClanMessages(interaction.client, finalClanData);
+
+    await interaction.editReply({ content: `✅ Вы покинули клан. Лидерство было успешно передано <@${newLeaderMember.id}>.` });
+}
+
+
 /**
  * Обновляет сообщения в реестре и логах
  * @param {import('discord.js').Client} client 
  * @param {object} clanData 
  */
 async function updateClanMessages(client, clanData) {
+    if (!clanData) return;
     // 1. Обновление сообщения в реестре кланов
     if (clanData.registryMessageId && config.CHANNELS.CLAN_REGISTRY) {
         try {
@@ -119,4 +234,5 @@ async function updateClanMessages(client, clanData) {
 module.exports = {
     handleSelect,
     handleModal,
+    handleLeave,
 };

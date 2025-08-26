@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { COLORS, EMOJIS } = require('../../config');
 
 /**
@@ -16,15 +16,21 @@ function createInsigniaEmbed(clans) {
         .addFields({
             name: '⚠️ Важно',
             value: '> • Вы можете состоять только в одном клане.\n' +
-                   '> • После выбора клана вам потребуется указать ваш **игровой никнейм** и **SteamID64**.'
+                   '> • После выбора клана вам потребуется указать ваш **игровой никнейм** и **SteamID64**.\n' +
+                   '> • Если вы хотите покинуть клан, используйте красную кнопку ниже.'
         })
-        .setFooter({ text: 'Выберите ваш клан из списка' });
+        .setFooter({ text: 'Выберите ваш клан из списка или используйте кнопки' });
 
+    // --- Выпадающий список ---
     const selectMenu = new StringSelectMenuBuilder()
         .setCustomId('insignia_clan_select')
         .setPlaceholder('Выберите клан для вступления...')
         .addOptions(
-            clans.slice(0, 25).map(clan =>
+            new StringSelectMenuOptionBuilder()
+                .setLabel('Сбросить выбор')
+                .setDescription('Нажмите, чтобы очистить текущий выбор.')
+                .setValue('insignia_reset_selection'),
+            ...clans.slice(0, 24).map(clan =>
                 new StringSelectMenuOptionBuilder()
                     .setLabel(`${clan.tag} | ${clan.name}`)
                     .setDescription(`Глава: ${clan.creatorTag}`)
@@ -32,11 +38,20 @@ function createInsigniaEmbed(clans) {
             )
         );
 
-    const row = new ActionRowBuilder().addComponents(selectMenu);
+    const selectRow = new ActionRowBuilder().addComponents(selectMenu);
+
+    // --- Кнопки ---
+    const buttonRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('insignia_leave_clan')
+            .setLabel('Покинуть клан')
+            .setStyle(ButtonStyle.Danger)
+    );
+
 
     return {
         embeds: [embed],
-        components: [row]
+        components: [selectRow, buttonRow]
     };
 }
 

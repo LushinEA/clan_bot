@@ -13,6 +13,8 @@ module.exports = {
             if (interaction.isButton()) {
                 if (interaction.customId.startsWith('clan_create_')) {
                     await clanCreationManager.handleButton(interaction);
+                } else if (interaction.customId === 'insignia_leave_clan') {
+                    await insigniaManager.handleLeave(interaction);
                 }
             }
 
