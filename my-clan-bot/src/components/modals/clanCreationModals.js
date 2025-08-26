@@ -44,10 +44,8 @@ function createBasicInfoModal(data = {}) {
     // --- Сервер ---
     const serverInput = new TextInputBuilder()
         .setCustomId('clan_server')
-        // ИЗМЕНЕНИЕ: Подсказка теперь в заголовке
         .setLabel('Сервер (1=Скучная, 2=Inv, 3=RAAS, 4=GE)')
         .setStyle(TextInputStyle.Short)
-        // ИЗМЕНЕНИЕ: Плейсхолдер стал проще
         .setPlaceholder('Введите одну цифру от 1 до 4')
         .setMinLength(1)
         .setMaxLength(1)
