@@ -138,11 +138,46 @@ async function submitAndCreateClan(interaction, session) {
         return;
     }
 
+    // --- Новая логика выдачи ролей ---
+
+    // 1. Выдать роль "Лидер клана"
     try {
-        await interaction.member.roles.add(newRole);
+        const leaderRole = await interaction.guild.roles.fetch(config.ROLES.CLAN_LEADER_ID);
+        if (leaderRole) {
+            await interaction.member.roles.add(leaderRole);
+        } else {
+            console.warn(`[ПРЕДУПРЕЖДЕНИЕ] Роль лидера клана с ID ${config.ROLES.CLAN_LEADER_ID} не найдена.`);
+        }
     } catch (error) {
-        console.warn(`[ПРЕДУПРЕЖДЕНИЕ] Не удалось выдать роль ${newRole.name} пользователю ${interaction.user.tag}.`, error);
+        console.warn(`[ПРЕДУПРЕЖДЕНИЕ] Не удалось выдать роль лидера клана пользователю ${interaction.user.tag}.`, error);
     }
+    
+    // 2. Собрать всех участников и выдать им новую роль клана
+    const memberIds = new Set([interaction.user.id]); // Начинаем с лидера
+    const rosterLines = session.data.roster.split('\n').filter(l => l.trim());
+    for (const line of rosterLines) {
+        const parts = line.split(',').map(p => p.trim());
+        const discordId = parts[2];
+        if (discordId && /^\d{17,19}$/.test(discordId)) {
+            memberIds.add(discordId);
+        }
+    }
+
+    let successCount = 0;
+    let failCount = 0;
+    const rolePromises = [];
+
+    for (const id of memberIds) {
+        rolePromises.push(
+            interaction.guild.members.fetch(id)
+                .then(member => member.roles.add(newRole))
+                .then(() => successCount++)
+                .catch(() => failCount++)
+        );
+    }
+    await Promise.allSettled(rolePromises);
+    console.log(`[РЕГИСТРАЦИЯ КЛАНА] Роль "${newRole.name}" выдана ${successCount} участникам. Не найдено на сервере: ${failCount}.`);
+
 
     const clansCollection = getClansCollection();
     const clanData = { ...session.data, status: 'approved', roleId: newRole.id, creatorId: interaction.user.id, creatorTag: interaction.user.tag, guildId: interaction.guild.id, createdAt: new Date(), };

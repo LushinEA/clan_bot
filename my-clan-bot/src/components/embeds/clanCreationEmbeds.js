@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { COLORS, EMOJIS } = require('../../config');
+const { COLORS, EMOJIS, CHANNELS } = require('../../config');
 
 function createProgressBar(currentStep, totalSteps = 4) {
     const filledBlocks = Math.round((currentStep / totalSteps) * 10);
@@ -116,27 +116,21 @@ function createFinalConfirmationEmbed(interaction, session) {
 
 function createSuccessEmbed(interaction, data, newRole) {
     const embed = new EmbedBuilder()
-        .setTitle(`${EMOJIS.ROCKET} КЛАН ***${data.name}*** УСПЕШНО СОЗДАН!`)
+        .setTitle(`${EMOJIS.ROCKET} КЛАН "${data.name}" УСПЕШНО СОЗДАН!`)
         .setColor(COLORS.SUCCESS)
         .setDescription(
             `Поздравляем с регистрацией вашего клана! Вот что произошло и что делать дальше:`
         )
         .addFields(
             { 
-                name: '✅ Создана роль клана', 
-                value: `Создана уникальная роль для вашего клана: <@&${newRole.id}>.`,
+                name: '✅ Роли созданы и распределены', 
+                value: `Создана роль <@&${newRole.id}>. Она была автоматически выдана всем участникам клана, найденным на сервере.\nВам, как главе, дополнительно выдана роль "Лидер клана".`,
                 inline: false
             },
             {
-                name: '✅ Выданы права лидера',
-                value: `Вам, как главе, автоматически выдана эта роль.`,
-                inline: false
-            },
-            {
-                name: 'Что дальше?',
-                value: `1. **Выдайте роль** всем участникам вашего клана.\n` +
-                       `2. **Проверьте реестр**: Ваш клан добавлен в канал <#1408834813800091684>.\n` +
-                       `3. **Получите нашивку**: Перейдите в <#1408834813800091685>, чтобы получить клановую нашивку (роль).`,
+                name: `${EMOJIS.PENCIL} Что дальше?`,
+                value: `1. **Проверьте реестр**: Ваш клан добавлен в канал <#${CHANNELS.CLAN_REGISTRY}>.\n` +
+                       `2. **Новые участники**: Если в клан вступают новые игроки, они могут получить роль в канале <#${CHANNELS.CLAN_INSIGNIA}>.`,
                 inline: false
             }
         )
