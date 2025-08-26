@@ -12,14 +12,7 @@ function createProgressBar(currentStep, totalSteps = 4) {
 function createMainEmbed() {
     const embed = new EmbedBuilder()
         .setTitle(`${EMOJIS.CLAN} **СИСТЕМА РЕГИСТРАЦИИ КЛАНОВ** ${EMOJIS.SPARKLES}`)
-        .setDescription(
-            `${EMOJIS.MAGIC} **Добро пожаловать в систему создания кланов!**\n\n` +
-            `${EMOJIS.SHIELD} **Требования:**\n` +
-            `› Минимум **5 активных участников**\n` +
-            `› Уникальный тег клана (**2-6 символов**)\n` +
-            `› Назначенный глава и заместитель\n\n` +
-            `${EMOJIS.ROCKET} **Нажмите кнопку ниже, чтобы начать создание!**`
-        )
+        .setDescription(`${EMOJIS.ROCKET} **Нажмите кнопку ниже, чтобы начать создание вашего клана!**`)
         .setColor(COLORS.PREMIUM)
         .setImage('https://i.imgur.com/your-banner-image.png');
 
@@ -34,165 +27,146 @@ function createMainEmbed() {
 
 function createStep1Embed(interaction) {
     const embed = new EmbedBuilder()
-        .setTitle(`${EMOJIS.SPARKLES} ШАГ 1/4: ОСНОВЫ КЛАНА`)
-        .setDescription(`${createProgressBar(1, 4)}\n\nЗаложите фундамент вашего клана, указав его название, тег и основную идею.`)
-        .setColor(COLORS.PREMIUM)
-        .addFields(
-            { name: `${EMOJIS.CROWN} Тег и Название`, value: 'Короткий тег и полное, запоминающееся имя.', inline: true },
-            { name: `${EMOJIS.MAGIC} Описание`, value: 'Цели, принципы и дух вашего клана.', inline: true }
-        )
-        .setFooter({ text: `Создание клана для ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() });
+        .setTitle(`${EMOJIS.SHIELD} ШАГ 1/4: ОСНОВНАЯ ИНФОРМАЦИЯ`)
+        .setDescription(`${createProgressBar(1, 4)}\n\nУкажите название, тег и другие базовые данные вашего клана.`)
+        .setColor(COLORS.PRIMARY)
+        .setFooter({ text: `Заявка от ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() });
 
     const button = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('clan_create_step1_button')
-            .setLabel('Заполнить основную информацию')
-            .setStyle(ButtonStyle.Primary)
+        new ButtonBuilder().setCustomId('clan_create_step1_button').setLabel('Заполнить информацию').setStyle(ButtonStyle.Primary)
     );
-    return { embeds: [embed], components: [button], ephemeral: true };
+    return { embeds: [embed], components: [button] };
 }
 
 function createStep2Embed(interaction, data) {
     const embed = new EmbedBuilder()
-        .setTitle(`${EMOJIS.CROWN} ШАГ 2/4: РУКОВОДСТВО`)
-        .setDescription(`${createProgressBar(2, 4)}\n\nКлан **${data.tag} ${data.name}** нуждается в сильных лидерах.`) 
+        .setTitle(`${EMOJIS.CROWN} ШАГ 2/4: ИНФОРМАЦИЯ О ГЛАВЕ`)
+        .setDescription(`${createProgressBar(2, 4)}\n\nТеперь введите информацию о себе как о главе клана.`)
         .setColor(COLORS.GOLD)
-        .addFields(
-            { name: 'Глава клана', value: 'Главный командир и стратег.', inline: true },
-            { name: 'Заместитель', value: 'Правая рука главы.', inline: true }
-        )
-        .setFooter({ text: `Создание клана для ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() });
+        .setFooter({ text: `Клан: ${data.tag} ${data.name}`, iconURL: interaction.user.displayAvatarURL() });
     
     const button = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('clan_create_step2_button')
-            .setLabel('Назначить руководство')
-            .setStyle(ButtonStyle.Success)
+        new ButtonBuilder().setCustomId('clan_create_step2_button').setLabel('Заполнить данные главы').setStyle(ButtonStyle.Success)
     );
-    return { embeds: [embed], components: [button], ephemeral: true };
+    return { embeds: [embed], components: [button] };
 }
 
 function createStep3Embed(interaction, data) {
     const embed = new EmbedBuilder()
-        .setTitle(`${EMOJIS.SHIELD} ШАГ 3/4: СОСТАВ КЛАНА`)
-        .setDescription(`${createProgressBar(3, 4)}\n\nВремя собрать команду для клана **${data.tag} ${data.name}**.`)
+        .setTitle(`${EMOJIS.USERS} ШАГ 3/4: СОСТАВ КЛАНА`)
+        .setDescription(`${createProgressBar(3, 4)}\n\nПеречислите всех участников вашего клана.`)
         .setColor(COLORS.WARNING)
-        .addFields(
-            { name: 'Список участников', value: 'Перечислите всех, кто будет в клане.', inline: true },
-            { name: 'Количество', value: 'Укажите общее число бойцов.', inline: true }
-        )
-        .setFooter({ text: `Создание клана для ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() });
+        .setFooter({ text: `Клан: ${data.tag} ${data.name}`, iconURL: interaction.user.displayAvatarURL() });
 
     const button = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('clan_create_step3_button')
-            .setLabel('Собрать команду')
-            .setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('clan_create_step3_button').setLabel('Заполнить состав').setStyle(ButtonStyle.Secondary)
     );
-    return { embeds: [embed], components: [button], ephemeral: true };
+    return { embeds: [embed], components: [button] };
 }
 
-function createStep4Embed(interaction, data) {
+function createEmblemRequestEmbed(interaction, data) {
     const embed = new EmbedBuilder()
-        .setTitle(`${EMOJIS.MAGIC} ШАГ 4/4: ДОПОЛНИТЕЛЬНО`)
-        .setDescription(`${createProgressBar(4, 4)}\n\nПоследние штрихи для клана **${data.tag} ${data.name}**.`)
+        .setTitle(`${EMOJIS.DIAMOND} ШАГ 4/4: ЭМБЛЕМА КЛАНА (НЕОБЯЗАТЕЛЬНО)`)
+        .setDescription(`${createProgressBar(4, 4)}\n\n${EMOJIS.LOADING} **Отправьте картинку эмблемы следующим сообщением.**\nУ вас есть 60 секунд.\n\nЕсли у вас нет эмблемы, просто нажмите "Пропустить".`)
         .setColor(COLORS.PREMIUM)
-        .addFields(
-            { name: 'Активность', value: 'Укажите время и часовой пояс.', inline: true },
-            { name: 'Специализация', value: 'В чем силен ваш клан?', inline: true }
-        )
-        .setFooter({ text: `Создание клана для ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() });
+        .setFooter({ text: `Клан: ${data.tag} ${data.name}`, iconURL: interaction.user.displayAvatarURL() });
 
     const button = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('clan_create_step4_button')
-            .setLabel('Добавить детали')
-            .setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('clan_emblem_skip').setLabel('Пропустить').setStyle(ButtonStyle.Secondary)
     );
-    return { embeds: [embed], components: [button], ephemeral: true };
+    return { embeds: [embed], components: [button] };
 }
+
 
 function createFinalConfirmationEmbed(interaction, session) {
-    const { data, startTime } = session;
-    const timeSpent = Math.round((Date.now() - startTime) / 60000); 
-
+    const { data } = session;
     const embed = new EmbedBuilder()
-        .setTitle(`${EMOJIS.CLAN} **${data.tag} ${data.name}** | ПРЕДПРОСМОТР`) 
-        .setDescription(`**Описание:**\n${data.description}\n\n*Заявка заполнена за ~${timeSpent} мин.*`)
-        .setColor(data.color.startsWith('#') ? data.color : `#${data.color}`)
+        .setTitle(`${EMOJIS.CLAN} **${data.tag} ${data.name}** | ПРЕДПРОСМОТР`)
+        .setColor(data.color)
         .addFields(
-            { name: 'Руководство', value: `**Глава:** ${data.leader}\n**Зам:** ${data.deputy}`, inline: true },
-            { name: 'Состав', value: `**Участников:** ${data.memberCount}`, inline: true },
-            { name: 'Активность', value: `**Время:** ${data.activityTime} (${data.timezone})`, inline: true },
-            { name: 'Опыт главы', value: `>>> ${data.experience}` },
-            { name: 'Специализация', value: `>>> ${data.specialties}` }
-        )
-        .setFooter({ text: 'Проверьте все данные перед отправкой.' });
-
-    if (data.emblem) embed.setThumbnail(data.emblem);
-
+            { name: 'Основной сервер', value: data.server, inline: true },
+            { name: 'Глава клана', value: `${data.leader_nick} (<@${data.leader_discordid}>)`, inline: true }
+        );
+    
+    if (data.emblem) {
+        embed.setThumbnail(data.emblem);
+    }
+        
     const buttons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('clan_create_confirm')
-            .setLabel('Подтвердить и отправить')
-            .setStyle(ButtonStyle.Success)
-            .setEmoji(EMOJIS.ROCKET),
-        new ButtonBuilder()
-            .setCustomId('clan_create_edit')
-            .setLabel('Изменить данные')
-            .setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('clan_create_confirm').setLabel('Подтвердить и создать клан').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('clan_create_edit').setLabel('Начать заново').setStyle(ButtonStyle.Danger)
     );
-    return { content: `**Ваша заявка почти готова!**`, embeds: [embed], components: [buttons], ephemeral: true };
+    return { content: `**Пожалуйста, проверьте все данные.**\n*Состав клана будет виден в логах для администрации.*`, embeds: [embed], components: [buttons] };
 }
 
 function createSuccessEmbed(interaction, data, newRole) {
     const embed = new EmbedBuilder()
-        .setTitle(`${EMOJIS.SPARKLES} КЛАН УСПЕШНО СОЗДАН!`)
-        .setDescription(
-            `Ваш клан **${data.tag} ${data.name}** был успешно зарегистрирован в системе.\n\n` + 
-            `✅ Роль <@&${newRole.id}> была автоматически создана для вашего клана.`
-            )
-        .setColor(COLORS.SUCCESS)
-        .setTimestamp()
-        .setFooter({ text: `Поздравляем с созданием клана!`, iconURL: interaction.guild.iconURL() });
+        .setTitle(`${EMOJIS.SPARKLES} КЛАН УСПЕШНО ЗАРЕГИСТРИРОВАН!`)
+        .setDescription(`Ваш клан **${data.tag} ${data.name}** был зарегистрирован.\n\nРоль <@&${newRole.id}> создана.`)
+        .setColor(COLORS.SUCCESS);
     return { content: '', embeds: [embed], components: [] };
 }
 
-function createEditModeEmbed() {
-    const embed = new EmbedBuilder()
-        .setTitle(`${EMOJIS.MAGIC} РЕЖИМ РЕДАКТИРОВАНИЯ`)
-        .setDescription(`Вы решили изменить данные. Сейчас мы вернемся к первому шагу. Ваши предыдущие ответы будут перезаписаны.`)
-        .setColor(COLORS.WARNING);
-    return { content: '', embeds: [embed], components: [], ephemeral: true };
+/**
+ * Форматирует состав в кликабельный текстовый список.
+ * @param {string} rosterString - Сырая строка со списком участников.
+ * @returns {string} - Отформатированный нумерованный список.
+ */
+function formatRosterAsTextList(rosterString) {
+    const lines = rosterString.split('\n').filter(l => l.trim());
+    const formattedLines = [];
+
+    formattedLines.push('**`No. | Никнейм | Discord | Steam`**');
+
+    for (let i = 0; i < lines.length; i++) {
+        const parts = lines[i].split(',').map(p => p.trim());
+        const nick = parts[0] || '`N/A`';
+        const steamId = parts[1] || null;
+        const discordId = parts[2] || null;
+
+        const discordMention = /^\d{17,19}$/.test(discordId) ? `<@${discordId}>` : '`N/A`';
+        const steamLink = /^\d{17}$/.test(steamId) ? `[Профиль](https://steamcommunity.com/profiles/${steamId})` : '`N/A`';
+        
+        const row = `${i + 1}. **${nick}** | ${discordMention} | ${steamLink}`;
+        formattedLines.push(row);
+    }
+
+    let output = formattedLines.join('\n');
+    if (output.length > 1024) {
+        output = output.slice(0, 1020) + '\n...';
+    }
+
+    return output;
 }
 
+/**
+ * ФИНАЛЬНАЯ ВЕРСИЯ ЛОГ-СООБЩЕНИЯ
+ */
 function createLogEmbed(interaction, session, newRole) {
     const { data } = session;
+    
+    const fullRosterString = `${data.leader_nick}, ${data.leader_steamid}, ${data.leader_discordid}\n${data.roster}`;
+    const memberCount = fullRosterString.split('\n').filter(l => l.trim()).length;
+
     const embed = new EmbedBuilder()
-        .setAuthor({ name: `Инициатор: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
-        .setTitle(`✅ Авто-создание клана`)
+        .setAuthor({ name: `Клан зарегистрировал: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+        .setTitle(`✅ Новый клан`)
+        .setColor(data.color)
         .setDescription(
             `**Тег:** ${data.tag}\n` +
             `**Название:** ${data.name}\n` +
             `**Созданная роль:** <@&${newRole.id}>`
         )
-        .setColor(COLORS.SUCCESS)
         .addFields(
-            { name: `${EMOJIS.PENCIL} Описание клана`, value: `>>> ${data.description}` },
-            { name: `${EMOJIS.CROWN} Руководство`, value: `**Глава:** ${data.leader}\n**Заместитель:** ${data.deputy}`, inline: true },
-            { name: `${EMOJIS.SHIELD} Состав`, value: `**Всего:** ${data.memberCount} участников`, inline: true },
-            { name: `${EMOJIS.FIRE} Активность`, value: `**Время:** ${data.activityTime} (${data.timezone})`, inline: true },
-            { name: `${EMOJIS.STAR} Опыт главы`, value: `>>> ${data.experience}` },
-            { name: `${EMOJIS.SWORD} Специализация`, value: `>>> ${data.specialties}` },
-            { name: `${EMOJIS.USERS} Список участников`, value: `\`\`\`\n${data.members}\n\`\`\`` }
+            { name: 'Основной сервер', value: data.server },
+            { name: '👑 Руководство', value: `Глава: <@${data.leader_discordid}>` },
+            { name: `🛡️ Состав (${memberCount} участников)`, value: formatRosterAsTextList(fullRosterString) }
         )
-        .setFooter({ text: `ID Заявителя: ${interaction.user.id}` })
         .setTimestamp();
-
+    
     if (data.emblem) {
         embed.setThumbnail(data.emblem);
     }
-
     return { embeds: [embed] };
 }
 
@@ -201,9 +175,8 @@ module.exports = {
     createStep1Embed,
     createStep2Embed,
     createStep3Embed,
-    createStep4Embed,
+    createEmblemRequestEmbed,
     createFinalConfirmationEmbed,
     createSuccessEmbed,
-    createEditModeEmbed,
     createLogEmbed,
 };
