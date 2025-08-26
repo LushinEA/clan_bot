@@ -13,7 +13,8 @@ async function start(interaction) {
         await interaction.reply({ content: 'Вы уже находитесь в процессе создания клана.', flags: [MessageFlags.Ephemeral] });
         return;
     }
-    registrationSessions.set(userId, { step: 1, data: {} });
+    // isEditing - флаг для режима редактирования
+    registrationSessions.set(userId, { step: 1, data: {}, isEditing: false });
     const reply = embeds.createStep1Embed(interaction);
     await interaction.reply({ ...reply, flags: [MessageFlags.Ephemeral] });
 }
@@ -23,7 +24,7 @@ async function handleButton(interaction) {
     const session = registrationSessions.get(userId);
     
     if (!session && !['clan_create_start'].includes(interaction.customId)) {
-        await interaction.reply({ content: '⏳ Ваша сессия создания клана истекла.', flags: [MessageFlags.Ephemeral] });
+        await interaction.reply({ content: '⏳ Ваша сессия создания клана истекла или была отменена.', flags: [MessageFlags.Ephemeral] });
         return;
     }
     try {
@@ -32,21 +33,26 @@ async function handleButton(interaction) {
                 await start(interaction);
                 break;
             case 'clan_create_step1_button':
-                await interaction.showModal(modals.createBasicInfoModal());
+                await interaction.showModal(modals.createBasicInfoModal(session.data));
                 break;
             case 'clan_create_step2_button':
-                await interaction.showModal(modals.createLeaderInfoModal());
+                await interaction.showModal(modals.createLeaderInfoModal(session.data));
                 break;
             case 'clan_create_step3_button':
-                await interaction.showModal(modals.createRosterModal());
+                await interaction.showModal(modals.createRosterModal(session.data));
                 break;
             case 'clan_create_confirm':
                 await submitAndCreateClan(interaction, session);
                 registrationSessions.delete(userId);
                 break;
-            case 'clan_create_edit':
+            case 'clan_create_edit': // Начинаем режим редактирования
+                session.isEditing = true;
+                // Показываем первое модальное окно с предзаполненными данными
+                await interaction.showModal(modals.createBasicInfoModal(session.data));
+                break;
+            case 'clan_create_cancel': // Отмена на любом шаге
                 registrationSessions.delete(userId);
-                await interaction.update({ content: 'Заявка отменена. Вы можете начать заново.', embeds: [], components: [], flags: [MessageFlags.Ephemeral] });
+                await interaction.update({ content: '✅ Регистрация клана отменена.', embeds: [], components: [] });
                 break;
         }
     } catch (error) {
@@ -60,7 +66,7 @@ async function handleModalSubmit(interaction) {
     if (!session) { return; }
 
     try {
-        await interaction.deferUpdate({ flags: [MessageFlags.Ephemeral] });
+        await interaction.deferUpdate();
         
         switch (interaction.customId) {
             case 'clan_create_step1_modal':
@@ -68,20 +74,40 @@ async function handleModalSubmit(interaction) {
                 session.data.name = interaction.fields.getTextInputValue('clan_name');
                 session.data.color = '#' + interaction.fields.getTextInputValue('clan_color');
                 session.data.server = interaction.fields.getTextInputValue('clan_server');
-                session.step = 2;
-                await interaction.editReply(embeds.createStep2Embed(interaction, session.data));
+                
+                if (session.isEditing) {
+                    // В режиме редактирования, показываем следующий embed с кнопкой
+                    await interaction.editReply(embeds.createStep2Embed(interaction, session.data));
+                } else {
+                    // В обычном режиме, переходим к следующему шагу (embed)
+                    session.step = 2;
+                    await interaction.editReply(embeds.createStep2Embed(interaction, session.data));
+                }
                 break;
             case 'clan_create_step2_modal':
                 session.data.leader_nick = interaction.fields.getTextInputValue('leader_nick');
                 session.data.leader_steamid = interaction.fields.getTextInputValue('leader_steamid');
                 session.data.leader_discordid = interaction.user.id;
-                session.step = 3;
-                await interaction.editReply(embeds.createStep3Embed(interaction, session.data));
+
+                if (session.isEditing) {
+                    // В режиме редактирования, показываем следующий embed с кнопкой
+                    await interaction.editReply(embeds.createStep3Embed(interaction, session.data));
+                } else {
+                    session.step = 3;
+                    await interaction.editReply(embeds.createStep3Embed(interaction, session.data));
+                }
                 break;
             case 'clan_create_step3_modal':
                 session.data.roster = interaction.fields.getTextInputValue('clan_roster');
-                session.step = 4;
-                await askForEmblem(interaction, session);
+
+                if (session.isEditing) {
+                    // Завершаем режим редактирования и возвращаемся к экрану подтверждения
+                    session.isEditing = false;
+                    await interaction.editReply(embeds.createFinalConfirmationEmbed(interaction, session));
+                } else {
+                    session.step = 4;
+                    await askForEmblem(interaction, session);
+                }
                 break;
         }
     } catch (error) {
@@ -92,16 +118,22 @@ async function handleModalSubmit(interaction) {
 async function askForEmblem(interaction, session) {
     await interaction.editReply(embeds.createEmblemRequestEmbed(interaction, session.data));
     
-    const filter = (i) => i.customId === 'clan_emblem_skip' && i.user.id === interaction.user.id;
+    const filter = (i) => ['clan_emblem_skip', 'clan_create_cancel'].includes(i.customId) && i.user.id === interaction.user.id;
     const collector = interaction.channel.createMessageComponentCollector({ filter, time: 60000, max: 1 });
     
     const messageFilter = (m) => m.author.id === interaction.user.id && m.attachments.size > 0;
     const messageCollector = interaction.channel.createMessageCollector({ filter: messageFilter, time: 60000, max: 1 });
 
     collector.on('collect', async i => {
+        if (i.customId === 'clan_create_cancel') {
+             messageCollector.stop('cancel');
+             registrationSessions.delete(interaction.user.id);
+             await i.update({ content: '✅ Регистрация клана отменена.', embeds: [], components: [] });
+             return;
+        }
         session.data.emblem = null;
         messageCollector.stop();
-        await i.update({ ...embeds.createFinalConfirmationEmbed(i, session), flags: [MessageFlags.Ephemeral] });
+        await i.update({ ...embeds.createFinalConfirmationEmbed(i, session) });
     });
 
     messageCollector.on('collect', async m => {
@@ -109,15 +141,16 @@ async function askForEmblem(interaction, session) {
         if (attachment && attachment.contentType?.startsWith('image')) {
             session.data.emblem = attachment.url;
             collector.stop();
-            await interaction.editReply({ ...embeds.createFinalConfirmationEmbed(interaction, session), flags: [MessageFlags.Ephemeral] });
+            await interaction.editReply({ ...embeds.createFinalConfirmationEmbed(interaction, session) });
             await m.delete().catch(() => {});
         }
     });
 
     collector.on('end', async (collected, reason) => {
+        if (reason === 'cancel') return;
         if (reason === 'time' && messageCollector.collected.size === 0) {
             session.data.emblem = null;
-            await interaction.editReply({ ...embeds.createFinalConfirmationEmbed(interaction, session), flags: [MessageFlags.Ephemeral] });
+            await interaction.editReply({ ...embeds.createFinalConfirmationEmbed(interaction, session) });
         }
     });
 }
@@ -134,7 +167,7 @@ async function submitAndCreateClan(interaction, session) {
         });
     } catch (error) {
         console.error('❌ Ошибка при создании роли:', error);
-        await interaction.editReply({ content: 'Не удалось создать роль. Проверьте права бота и корректность HEX-кода.', embeds: [], components: [], flags: [MessageFlags.Ephemeral] });
+        await interaction.editReply({ content: 'Не удалось создать роль. Проверьте права бота и корректность HEX-кода.', embeds: [], components: [] });
         return;
     }
 

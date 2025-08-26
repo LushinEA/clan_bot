@@ -1,3 +1,5 @@
+const { MessageFlags } = require('discord.js');
+
 /**
  * Централизованный обработчик ошибок для взаимодействий.
  * Логирует подробную информацию для разработчика и отправляет
@@ -21,7 +23,7 @@ async function handleInteractionError(error, interaction, source = 'Неизве
     // 2. Понятный и безопасный ответ для пользователя
     const errorMessage = {
         content: '⚙️ Произошла непредвиденная ошибка. Я уже сообщил разработчикам об этой проблеме. Пожалуйста, попробуйте снова чуть позже.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral, // Использование flags вместо ephemeral
     };
 
     try {

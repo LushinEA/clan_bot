@@ -1,6 +1,17 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { COLORS, EMOJIS, CHANNELS } = require('../../config');
 
+/**
+ * Вспомогательная функция для создания кнопки отмены.
+ * @returns {ButtonBuilder}
+ */
+function createCancelButton() {
+    return new ButtonBuilder()
+        .setCustomId('clan_create_cancel')
+        .setLabel('Отмена')
+        .setStyle(ButtonStyle.Danger);
+}
+
 function createProgressBar(currentStep, totalSteps = 4) {
     const filledBlocks = Math.round((currentStep / totalSteps) * 10);
     const emptyBlocks = 10 - filledBlocks;
@@ -60,10 +71,11 @@ function createStep1Embed(interaction) {
         .setColor(COLORS.PRIMARY)
         .setFooter({ text: `Заявка от ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() });
 
-    const button = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('clan_create_step1_button').setLabel('Заполнить информацию').setStyle(ButtonStyle.Primary)
+    const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('clan_create_step1_button').setLabel('Заполнить информацию').setStyle(ButtonStyle.Primary),
+        createCancelButton()
     );
-    return { embeds: [embed], components: [button] };
+    return { embeds: [embed], components: [buttons] };
 }
 
 function createStep2Embed(interaction, data) {
@@ -73,10 +85,11 @@ function createStep2Embed(interaction, data) {
         .setColor(COLORS.GOLD)
         .setFooter({ text: `Клан: ${data.tag} ${data.name}`, iconURL: interaction.user.displayAvatarURL() });
     
-    const button = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('clan_create_step2_button').setLabel('Заполнить данные главы').setStyle(ButtonStyle.Success)
+    const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('clan_create_step2_button').setLabel('Заполнить данные главы').setStyle(ButtonStyle.Success),
+        createCancelButton()
     );
-    return { embeds: [embed], components: [button] };
+    return { embeds: [embed], components: [buttons] };
 }
 
 function createStep3Embed(interaction, data) {
@@ -86,10 +99,11 @@ function createStep3Embed(interaction, data) {
         .setColor(COLORS.WARNING)
         .setFooter({ text: `Клан: ${data.tag} ${data.name}`, iconURL: interaction.user.displayAvatarURL() });
 
-    const button = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('clan_create_step3_button').setLabel('Заполнить состав').setStyle(ButtonStyle.Secondary)
+    const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('clan_create_step3_button').setLabel('Заполнить состав').setStyle(ButtonStyle.Secondary),
+        createCancelButton()
     );
-    return { embeds: [embed], components: [button] };
+    return { embeds: [embed], components: [buttons] };
 }
 
 function createEmblemRequestEmbed(interaction, data) {
@@ -99,12 +113,12 @@ function createEmblemRequestEmbed(interaction, data) {
         .setColor(COLORS.PREMIUM)
         .setFooter({ text: `Клан: ${data.tag} ${data.name}`, iconURL: interaction.user.displayAvatarURL() });
 
-    const button = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('clan_emblem_skip').setLabel('Пропустить').setStyle(ButtonStyle.Secondary)
+    const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('clan_emblem_skip').setLabel('Пропустить').setStyle(ButtonStyle.Secondary),
+        createCancelButton()
     );
-    return { embeds: [embed], components: [button] };
+    return { embeds: [embed], components: [buttons] };
 }
-
 
 function createFinalConfirmationEmbed(interaction, session) {
     const { data } = session;
@@ -129,15 +143,16 @@ function createFinalConfirmationEmbed(interaction, session) {
                 inline: false 
             }
         )
-        .setFooter({ text: 'Нажмите "Подтвердить", если все верно, или "Начать заново" для исправления.' });
+        .setFooter({ text: 'Нажмите "Подтвердить", если все верно, или "Редактировать" для исправления.' });
     
     if (data.emblem) {
         embed.setThumbnail(data.emblem);
     }
         
     const buttons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('clan_create_confirm').setLabel('Подтвердить и создать клан').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('clan_create_edit').setLabel('Начать заново').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId('clan_create_confirm').setLabel('Подтвердить и создать').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('clan_create_edit').setLabel('Редактировать').setStyle(ButtonStyle.Primary),
+        createCancelButton()
     );
     return { content: `**Финальный шаг! Проверьте данные ниже.**\n*Полный состав клана будет виден администрации в логах.*`, embeds: [embed], components: [buttons] };
 }
@@ -171,16 +186,9 @@ function createSuccessEmbed(interaction, data, newRole) {
     return { content: `Поздравляем, <@${interaction.user.id}>!`, embeds: [embed], components: [] };
 }
 
-/**
- * Форматирует состав в кликабельный текстовый список.
- * @param {string} rosterString - Сырая строка со списком участников.
- * @returns {string} - Отформатированный нумерованный список.
- */
 function formatRosterAsTextList(rosterString) {
     const lines = rosterString.split('\n').filter(l => l.trim());
     const formattedLines = [];
-
-    formattedLines.push('**`No. | Никнейм | Discord | Steam`**');
 
     for (let i = 0; i < lines.length; i++) {
         const parts = lines[i].split(',').map(p => p.trim());
@@ -203,9 +211,6 @@ function formatRosterAsTextList(rosterString) {
     return output;
 }
 
-/**
- * ЛОГ-СООБЩЕНИЕ
- */
 function createLogEmbed(interaction, session, newRole) {
     const { data } = session;
     
