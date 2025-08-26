@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
-const { COLORS, EMOJIS, CHANNELS } = require('../../config');
+const { COLORS, EMOJIS, CHANNELS, SERVERS } = require('../../config');
 const path = require('path');
 
 /**
@@ -132,6 +132,7 @@ function createFinalConfirmationEmbed(interaction, session) {
     const { data } = session;
     const memberCount = 1 + (data.roster ? data.roster.split('\n').filter(l => l.trim()).length : 0);
     const steamLink = /^\d{17}$/.test(data.leader_steamid) ? `[Профиль](https://steamcommunity.com/profiles/${data.leader_steamid})` : '`Некорректный ID`';
+    const serverName = SERVERS[data.server] || 'Не указан'; // Трансформация номера в название
 
     const embed = new EmbedBuilder()
         .setTitle(`${EMOJIS.PENCIL} ПРОВЕРКА ДАННЫХ ПЕРЕД СОЗДАНИЕМ`)
@@ -143,7 +144,7 @@ function createFinalConfirmationEmbed(interaction, session) {
         .addFields(
             { name: 'Название и тег клана', value: `**\`${data.tag}\` ${data.name}**`, inline: false },
             { name: 'Цвет роли', value: `\`${data.color.toUpperCase()}\``, inline: true },
-            { name: 'Основной сервер', value: data.server, inline: true },
+            { name: 'Основной сервер', value: serverName, inline: true }, // Используем serverName
             { name: 'Общее кол-во участников', value: `\`${memberCount}\` чел.`, inline: true },
             { 
                 name: `${EMOJIS.CROWN} Глава клана`, 
@@ -224,6 +225,7 @@ function createLogEmbed(interaction, session, newRole) {
     
     const fullRosterString = `${data.leader_nick}, ${data.leader_steamid}, ${data.leader_discordid}\n${data.roster}`;
     const memberCount = fullRosterString.split('\n').filter(l => l.trim()).length;
+    const serverName = SERVERS[data.server] || 'Не указан'; // Трансформация номера в название
 
     const embed = new EmbedBuilder()
         .setAuthor({ name: `Клан зарегистрировал: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
@@ -235,7 +237,7 @@ function createLogEmbed(interaction, session, newRole) {
             `**Созданная роль:** <@&${newRole.id}>`
         )
         .addFields(
-            { name: 'Основной сервер', value: data.server },
+            { name: 'Основной сервер', value: serverName }, // Используем serverName
             { name: '👑 Руководство', value: `Глава: <@${data.leader_discordid}>` },
             { name: `🛡️ Состав (${memberCount} участников)`, value: formatRosterAsTextList(fullRosterString) }
         )
@@ -254,6 +256,7 @@ function createLogEmbed(interaction, session, newRole) {
  */
 function createRegistryEmbed(clanData) {
     const memberCount = 1 + (clanData.roster ? clanData.roster.split('\n').filter(l => l.trim()).length : 0);
+    const serverName = SERVERS[clanData.server] || 'Не указан'; // Трансформация номера в название
 
     const embed = new EmbedBuilder()
         .setColor(clanData.color)
@@ -261,7 +264,7 @@ function createRegistryEmbed(clanData) {
         .addFields(
             { name: `${EMOJIS.CROWN} Глава клана`, value: `<@${clanData.leader_discordid}>`, inline: true },
             { name: `${EMOJIS.USERS} Участников`, value: `\`${memberCount}\` чел.`, inline: true },
-            { name: `${EMOJIS.ROCKET} Основной сервер`, value: `\`${clanData.server}\``, inline: true },
+            { name: `${EMOJIS.ROCKET} Основной сервер`, value: `\`${serverName}\``, inline: true }, // Используем serverName
             { name: 'Роль клана', value: `<@&${clanData.roleId}>`, inline: false }
         )
         .setFooter({ text: `Клан зарегистрирован: ${new Date(clanData.createdAt).toLocaleDateString('ru-RU')}` });

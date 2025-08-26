@@ -36,5 +36,13 @@ module.exports = {
     CHANNELS: {
         CLAN_REGISTRY: "1408834813800091684",
         CLAN_INSIGNIA: "1408834813800091685"
+    },
+
+    // Соответствие номеров серверов их названиям
+    SERVERS: {
+        '1': '#1 Скучно и точка',
+        '2': '#2 Invasion',
+        '3': '#3 AAS/RAAS',
+        '4': '#4 Global Escalation'
     }
 };

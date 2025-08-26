@@ -67,11 +67,35 @@ async function handleModalSubmit(interaction) {
         await interaction.deferUpdate();
         
         switch (interaction.customId) {
-            case 'clan_create_step1_modal':
-                session.data.tag = interaction.fields.getTextInputValue('clan_tag');
-                session.data.name = interaction.fields.getTextInputValue('clan_name');
-                session.data.color = '#' + interaction.fields.getTextInputValue('clan_color');
-                session.data.server = interaction.fields.getTextInputValue('clan_server');
+            case 'clan_create_step1_modal': {
+                const tag = interaction.fields.getTextInputValue('clan_tag');
+                const name = interaction.fields.getTextInputValue('clan_name');
+                const color = interaction.fields.getTextInputValue('clan_color');
+                const server = interaction.fields.getTextInputValue('clan_server');
+
+                // --- ВАЛИДАЦИЯ ---
+                const hexRegex = /^[0-9A-F]{6}$/i;
+                if (!hexRegex.test(color)) {
+                    await interaction.followUp({ 
+                        content: '❌ **Ошибка!** Неверный формат HEX-кода цвета. Введите 6 символов от 0-9 и A-F (например, `FF5733`). Пожалуйста, нажмите кнопку "Заполнить информацию" еще раз.', 
+                        flags: [MessageFlags.Ephemeral] 
+                    });
+                    return;
+                }
+
+                if (!Object.keys(config.SERVERS).includes(server)) {
+                    await interaction.followUp({ 
+                        content: '❌ **Ошибка!** Неверный номер сервера. Укажите одну цифру от 1 до 4. Пожалуйста, нажмите кнопку "Заполнить информацию" еще раз.', 
+                        flags: [MessageFlags.Ephemeral] 
+                    });
+                    return;
+                }
+                // --- КОНЕЦ ВАЛИДАЦИИ ---
+
+                session.data.tag = tag;
+                session.data.name = name;
+                session.data.color = '#' + color.toUpperCase();
+                session.data.server = server;
                 
                 if (session.isEditing) {
                     await interaction.editReply(embeds.createStep2Embed(interaction, session.data));
@@ -80,9 +104,24 @@ async function handleModalSubmit(interaction) {
                     await interaction.editReply(embeds.createStep2Embed(interaction, session.data));
                 }
                 break;
-            case 'clan_create_step2_modal':
-                session.data.leader_nick = interaction.fields.getTextInputValue('leader_nick');
-                session.data.leader_steamid = interaction.fields.getTextInputValue('leader_steamid');
+            }
+            case 'clan_create_step2_modal': {
+                const leaderNick = interaction.fields.getTextInputValue('leader_nick');
+                const leaderSteamId = interaction.fields.getTextInputValue('leader_steamid');
+
+                // --- ВАЛИДАЦИЯ ---
+                const steamIdRegex = /^\d{17}$/;
+                if (!steamIdRegex.test(leaderSteamId)) {
+                     await interaction.followUp({ 
+                        content: '❌ **Ошибка!** Неверный формат SteamID64. Он должен состоять ровно из 17 цифр. Пожалуйста, нажмите кнопку "Заполнить данные главы" еще раз.', 
+                        flags: [MessageFlags.Ephemeral] 
+                    });
+                    return;
+                }
+                // --- КОНЕЦ ВАЛИДАЦИИ ---
+
+                session.data.leader_nick = leaderNick;
+                session.data.leader_steamid = leaderSteamId;
                 session.data.leader_discordid = interaction.user.id;
 
                 if (session.isEditing) {
@@ -92,8 +131,48 @@ async function handleModalSubmit(interaction) {
                     await interaction.editReply(embeds.createStep3Embed(interaction, session.data));
                 }
                 break;
-            case 'clan_create_step3_modal':
-                session.data.roster = interaction.fields.getTextInputValue('clan_roster');
+            }
+            case 'clan_create_step3_modal': {
+                const roster = interaction.fields.getTextInputValue('clan_roster');
+
+                // --- УСИЛЕННАЯ ВАЛИДАЦИЯ СОСТАВА ---
+                const lines = roster.split('\n').filter(line => line.trim() !== '');
+                const steamIdRegex = /^\d{17}$/;
+                const discordIdRegex = /^\d{17,19}$/;
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    const parts = line.split(',').map(p => p.trim());
+
+                    if (parts.length !== 3) {
+                        await interaction.followUp({ 
+                            content: `❌ **Ошибка в строке ${i + 1}:** \`${line}\`\nНеверный формат. Ожидается: \`Никнейм, SteamID, DiscordID\`. Пожалуйста, исправьте и попробуйте снова.`, 
+                            flags: [MessageFlags.Ephemeral] 
+                        });
+                        return;
+                    }
+
+                    const [nick, steamId, discordId] = parts;
+
+                    if (!steamIdRegex.test(steamId)) {
+                        await interaction.followUp({ 
+                            content: `❌ **Ошибка в строке ${i + 1}:** \`${line}\`\nНеверный формат SteamID \`${steamId}\`. Он должен состоять ровно из 17 цифр.`, 
+                            flags: [MessageFlags.Ephemeral] 
+                        });
+                        return;
+                    }
+
+                    if (!discordIdRegex.test(discordId)) {
+                         await interaction.followUp({ 
+                            content: `❌ **Ошибка в строке ${i + 1}:** \`${line}\`\nНеверный формат Discord ID \`${discordId}\`. Проверьте, что ID скопирован правильно.`, 
+                            flags: [MessageFlags.Ephemeral] 
+                        });
+                        return;
+                    }
+                }
+                // --- КОНЕЦ ВАЛИДАЦИИ ---
+
+                session.data.roster = roster;
 
                 if (session.isEditing) {
                     session.isEditing = false;
@@ -103,6 +182,7 @@ async function handleModalSubmit(interaction) {
                     await askForEmblem(interaction, session);
                 }
                 break;
+            }
         }
     } catch (error) {
         await handleInteractionError(error, interaction, `handleModalSubmit: ${interaction.customId}`);

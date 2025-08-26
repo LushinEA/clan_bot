@@ -35,7 +35,7 @@ function createBasicInfoModal(data = {}) {
         .setCustomId('clan_color')
         .setLabel(`${EMOJIS.SPARKLES} Цвет роли (6 HEX символов, без #)`)
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Например: FF5733')
+        .setPlaceholder('Например: FF5733 или 00A8F3')
         .setMinLength(6)
         .setMaxLength(6)
         .setRequired(true);
@@ -44,9 +44,13 @@ function createBasicInfoModal(data = {}) {
     // --- Сервер ---
     const serverInput = new TextInputBuilder()
         .setCustomId('clan_server')
-        .setLabel(`${EMOJIS.ROCKET} Основной игровой сервер`)
+        // ИЗМЕНЕНИЕ: Подсказка теперь в заголовке
+        .setLabel('Сервер (1=Скучная, 2=Inv, 3=RAAS, 4=GE)')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Например: [RU] Bear-W SQUAD Official')
+        // ИЗМЕНЕНИЕ: Плейсхолдер стал проще
+        .setPlaceholder('Введите одну цифру от 1 до 4')
+        .setMinLength(1)
+        .setMaxLength(1)
         .setRequired(true);
     if (data.server) serverInput.setValue(data.server);
 
