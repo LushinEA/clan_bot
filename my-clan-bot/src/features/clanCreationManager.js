@@ -138,6 +138,12 @@ async function submitAndCreateClan(interaction, session) {
         return;
     }
 
+    try {
+        await interaction.member.roles.add(newRole);
+    } catch (error) {
+        console.warn(`[ПРЕДУПРЕЖДЕНИЕ] Не удалось выдать роль ${newRole.name} пользователю ${interaction.user.tag}.`, error);
+    }
+
     const clansCollection = getClansCollection();
     const clanData = { ...session.data, status: 'approved', roleId: newRole.id, creatorId: interaction.user.id, creatorTag: interaction.user.tag, guildId: interaction.guild.id, createdAt: new Date(), };
     await clansCollection.insertOne(clanData);

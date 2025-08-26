@@ -80,13 +80,28 @@ function createEmblemRequestEmbed(interaction, data) {
 
 function createFinalConfirmationEmbed(interaction, session) {
     const { data } = session;
+    const memberCount = 1 + (data.roster ? data.roster.split('\n').filter(l => l.trim()).length : 0);
+    const steamLink = /^\d{17}$/.test(data.leader_steamid) ? `[Профиль](https://steamcommunity.com/profiles/${data.leader_steamid})` : '`Некорректный ID`';
+
     const embed = new EmbedBuilder()
-        .setTitle(`${EMOJIS.CLAN} **${data.tag} ${data.name}** | ПРЕДПРОСМОТР`)
+        .setTitle(`${EMOJIS.PENCIL} ПРОВЕРКА ДАННЫХ ПЕРЕД СОЗДАНИЕМ`)
         .setColor(data.color)
+        .setDescription(
+            `**Пожалуйста, внимательно проверьте всю информацию.**\n` +
+            `После подтверждения будет создана роль для вашего клана и заявка будет отправлена на регистрацию.`
+        )
         .addFields(
+            { name: 'Название и тег клана', value: `**\`${data.tag}\` ${data.name}**`, inline: false },
+            { name: 'Цвет роли', value: `\`${data.color.toUpperCase()}\``, inline: true },
             { name: 'Основной сервер', value: data.server, inline: true },
-            { name: 'Глава клана', value: `${data.leader_nick} (<@${data.leader_discordid}>)`, inline: true }
-        );
+            { name: 'Общее кол-во участников', value: `\`${memberCount}\` чел.`, inline: true },
+            { 
+                name: `${EMOJIS.CROWN} Глава клана`, 
+                value: `**Ник:** ${data.leader_nick}\n**Discord:** <@${data.leader_discordid}>\n**Steam:** ${steamLink}`, 
+                inline: false 
+            }
+        )
+        .setFooter({ text: 'Нажмите "Подтвердить", если все верно, или "Начать заново" для исправления.' });
     
     if (data.emblem) {
         embed.setThumbnail(data.emblem);
@@ -96,15 +111,42 @@ function createFinalConfirmationEmbed(interaction, session) {
         new ButtonBuilder().setCustomId('clan_create_confirm').setLabel('Подтвердить и создать клан').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('clan_create_edit').setLabel('Начать заново').setStyle(ButtonStyle.Danger)
     );
-    return { content: `**Пожалуйста, проверьте все данные.**\n*Состав клана будет виден в логах для администрации.*`, embeds: [embed], components: [buttons] };
+    return { content: `**Финальный шаг! Проверьте данные ниже.**\n*Полный состав клана будет виден администрации в логах.*`, embeds: [embed], components: [buttons] };
 }
 
 function createSuccessEmbed(interaction, data, newRole) {
     const embed = new EmbedBuilder()
-        .setTitle(`${EMOJIS.SPARKLES} КЛАН УСПЕШНО ЗАРЕГИСТРИРОВАН!`)
-        .setDescription(`Ваш клан **${data.tag} ${data.name}** был зарегистрирован.\n\nРоль <@&${newRole.id}> создана.`)
-        .setColor(COLORS.SUCCESS);
-    return { content: '', embeds: [embed], components: [] };
+        .setTitle(`${EMOJIS.ROCKET} КЛАН ***${data.name}*** УСПЕШНО СОЗДАН!`)
+        .setColor(COLORS.SUCCESS)
+        .setDescription(
+            `Поздравляем с регистрацией вашего клана! Вот что произошло и что делать дальше:`
+        )
+        .addFields(
+            { 
+                name: '✅ Создана роль клана', 
+                value: `Создана уникальная роль для вашего клана: <@&${newRole.id}>.`,
+                inline: false
+            },
+            {
+                name: '✅ Выданы права лидера',
+                value: `Вам, как главе, автоматически выдана эта роль.`,
+                inline: false
+            },
+            {
+                name: 'Что дальше?',
+                value: `1. **Выдайте роль** всем участникам вашего клана.\n` +
+                       `2. **Проверьте реестр**: Ваш клан добавлен в канал <#1408834813800091684>.\n` +
+                       `3. **Получите нашивку**: Перейдите в <#1408834813800091685>, чтобы получить клановую нашивку (роль).`,
+                inline: false
+            }
+        )
+        .setFooter({ text: 'Добро пожаловать в клановую систему!' });
+
+    if (data.emblem) {
+        embed.setThumbnail(data.emblem);
+    }
+    
+    return { content: `Поздравляем, <@${interaction.user.id}>!`, embeds: [embed], components: [] };
 }
 
 /**
@@ -140,7 +182,7 @@ function formatRosterAsTextList(rosterString) {
 }
 
 /**
- * ФИНАЛЬНАЯ ВЕРСИЯ ЛОГ-СООБЩЕНИЯ
+ * ЛОГ-СООБЩЕНИЕ
  */
 function createLogEmbed(interaction, session, newRole) {
     const { data } = session;
