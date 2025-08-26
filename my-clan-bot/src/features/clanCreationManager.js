@@ -13,7 +13,6 @@ async function start(interaction) {
         await interaction.reply({ content: 'Вы уже находитесь в процессе создания клана.', flags: [MessageFlags.Ephemeral] });
         return;
     }
-    // isEditing - флаг для режима редактирования
     registrationSessions.set(userId, { step: 1, data: {}, isEditing: false });
     const reply = embeds.createStep1Embed(interaction);
     await interaction.reply({ ...reply, flags: [MessageFlags.Ephemeral] });
@@ -45,12 +44,11 @@ async function handleButton(interaction) {
                 await submitAndCreateClan(interaction, session);
                 registrationSessions.delete(userId);
                 break;
-            case 'clan_create_edit': // Начинаем режим редактирования
+            case 'clan_create_edit':
                 session.isEditing = true;
-                // Показываем первое модальное окно с предзаполненными данными
                 await interaction.showModal(modals.createBasicInfoModal(session.data));
                 break;
-            case 'clan_create_cancel': // Отмена на любом шаге
+            case 'clan_create_cancel':
                 registrationSessions.delete(userId);
                 await interaction.update({ content: '✅ Регистрация клана отменена.', embeds: [], components: [] });
                 break;
@@ -76,10 +74,8 @@ async function handleModalSubmit(interaction) {
                 session.data.server = interaction.fields.getTextInputValue('clan_server');
                 
                 if (session.isEditing) {
-                    // В режиме редактирования, показываем следующий embed с кнопкой
                     await interaction.editReply(embeds.createStep2Embed(interaction, session.data));
                 } else {
-                    // В обычном режиме, переходим к следующему шагу (embed)
                     session.step = 2;
                     await interaction.editReply(embeds.createStep2Embed(interaction, session.data));
                 }
@@ -90,7 +86,6 @@ async function handleModalSubmit(interaction) {
                 session.data.leader_discordid = interaction.user.id;
 
                 if (session.isEditing) {
-                    // В режиме редактирования, показываем следующий embed с кнопкой
                     await interaction.editReply(embeds.createStep3Embed(interaction, session.data));
                 } else {
                     session.step = 3;
@@ -101,7 +96,6 @@ async function handleModalSubmit(interaction) {
                 session.data.roster = interaction.fields.getTextInputValue('clan_roster');
 
                 if (session.isEditing) {
-                    // Завершаем режим редактирования и возвращаемся к экрану подтверждения
                     session.isEditing = false;
                     await interaction.editReply(embeds.createFinalConfirmationEmbed(interaction, session));
                 } else {
@@ -171,7 +165,7 @@ async function submitAndCreateClan(interaction, session) {
         return;
     }
 
-    // --- Новая логика выдачи ролей ---
+    // --- Логика выдачи ролей ---
 
     // 1. Выдать роль "Лидер клана"
     try {
@@ -223,6 +217,19 @@ async function submitAndCreateClan(interaction, session) {
             await reviewChannel.send(embeds.createLogEmbed(interaction, session, newRole));
         } catch (error) { console.error(`!! Ошибка отправки лога в канал (ID: ${reviewChannelId}).`, error); }
     }
+    
+    // --- Публикация в общедоступном реестре ---
+    const registryChannelId = config.CHANNELS.CLAN_REGISTRY;
+    if (registryChannelId) {
+        try {
+            const registryChannel = await interaction.guild.channels.fetch(registryChannelId);
+            const registryEmbed = embeds.createRegistryEmbed(clanData);
+            await registryChannel.send({ embeds: [registryEmbed] });
+        } catch (error) {
+            console.error(`!! Ошибка отправки сообщения в реестр кланов (ID: ${registryChannelId}).`, error);
+        }
+    }
+    // --- Конец блока публикации ---
     
     await interaction.editReply({ ...embeds.createSuccessEmbed(interaction, session.data, newRole), flags: [MessageFlags.Ephemeral] });
 }

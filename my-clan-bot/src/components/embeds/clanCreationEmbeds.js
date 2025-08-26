@@ -1,7 +1,5 @@
-// ИЗМЕНЕНИЕ 1: Добавляем AttachmentBuilder для работы с файлами
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const { COLORS, EMOJIS, CHANNELS } = require('../../config');
-// ИЗМЕНЕНИЕ 2: Подключаем модуль 'path' для корректной работы с путями к файлам
 const path = require('path');
 
 /**
@@ -24,11 +22,6 @@ function createProgressBar(currentStep, totalSteps = 4) {
 }
 
 function createMainEmbed() {
-    // ИЗМЕНЕНИЕ 3: Создаем аттачмент из локального файла
-    // path.join создает корректный путь к файлу независимо от операционной системы.
-    // __dirname - это папка, в которой находится текущий JS файл.
-    // '..', '..' - переходим на два уровня вверх.
-    // Убедитесь, что этот путь верен для вашей структуры проекта.
     const bannerPath = path.join(__dirname, '..', '..', 'data', 'banner_LVA.jpg');
     const bannerAttachment = new AttachmentBuilder(bannerPath, { name: 'banner_LVA.jpg' });
 
@@ -64,7 +57,6 @@ function createMainEmbed() {
             }
         )
         .setFooter({ text: 'Когда все данные будут готовы, нажмите кнопку ниже.' })
-        // ИЗМЕНЕНИЕ 4: Устанавливаем изображение, ссылаясь на прикрепленный файл
         .setImage('attachment://banner_LVA.jpg'); 
 
     const button = new ActionRowBuilder().addComponents(
@@ -73,7 +65,6 @@ function createMainEmbed() {
             .setLabel(`${EMOJIS.ROCKET} НАЧАТЬ РЕГИСТРАЦИЮ`)
             .setStyle(ButtonStyle.Primary)
     );
-    // ИЗМЕНЕНИЕ 5: Возвращаем объект, который теперь включает и массив files
     return { 
         embeds: [embed], 
         components: [button], 
@@ -256,6 +247,32 @@ function createLogEmbed(interaction, session, newRole) {
     return { embeds: [embed] };
 }
 
+/**
+ * Создает Embed для отображения информации о клане в общедоступном реестре.
+ * @param {object} clanData - Объект с данными клана из MongoDB.
+ * @returns {import('discord.js').EmbedBuilder}
+ */
+function createRegistryEmbed(clanData) {
+    const memberCount = 1 + (clanData.roster ? clanData.roster.split('\n').filter(l => l.trim()).length : 0);
+
+    const embed = new EmbedBuilder()
+        .setColor(clanData.color)
+        .setTitle(`${EMOJIS.SHIELD} \`${clanData.tag}\` | ${clanData.name}`)
+        .addFields(
+            { name: `${EMOJIS.CROWN} Глава клана`, value: `<@${clanData.leader_discordid}>`, inline: true },
+            { name: `${EMOJIS.USERS} Участников`, value: `\`${memberCount}\` чел.`, inline: true },
+            { name: `${EMOJIS.ROCKET} Основной сервер`, value: `\`${clanData.server}\``, inline: true },
+            { name: 'Роль клана', value: `<@&${clanData.roleId}>`, inline: false }
+        )
+        .setFooter({ text: `Клан зарегистрирован: ${new Date(clanData.createdAt).toLocaleDateString('ru-RU')}` });
+
+    if (clanData.emblem) {
+        embed.setThumbnail(clanData.emblem);
+    }
+
+    return embed;
+}
+
 module.exports = {
     createMainEmbed,
     createStep1Embed,
@@ -265,4 +282,5 @@ module.exports = {
     createFinalConfirmationEmbed,
     createSuccessEmbed,
     createLogEmbed,
+    createRegistryEmbed,
 };
