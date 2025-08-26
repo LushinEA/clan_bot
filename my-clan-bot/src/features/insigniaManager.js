@@ -3,7 +3,9 @@ const { getClansCollection } = require('../utils/database');
 const { handleInteractionError } = require('../utils/errorHandler');
 const modals = require('../components/modals/insigniaModals');
 const embeds = require('../components/embeds/clanCreationEmbeds');
+const insigniaEmbeds = require('../components/embeds/insigniaEmbeds');
 const config = require('../config');
+const { getState } = require('../utils/stateManager');
 
 async function handleSelect(interaction) {
     const clanRoleId = interaction.values[0];
@@ -62,10 +64,7 @@ async function handleModal(interaction) {
         const newRosterEntry = `${nick}, ${steamId}, ${discordId}`;
         const updatedRoster = clan.roster ? `${clan.roster}\n${newRosterEntry}` : newRosterEntry;
         
-        await clansCollection.updateOne(
-            { _id: clan._id },
-            { $set: { roster: updatedRoster } }
-        );
+        await clansCollection.updateOne({ _id: clan._id }, { $set: { roster: updatedRoster } });
 
         // Выдача роли
         const role = await interaction.guild.roles.fetch(clanRoleId);
@@ -75,7 +74,7 @@ async function handleModal(interaction) {
              throw new Error(`Роль с ID ${clanRoleId} не найдена на сервере!`);
         }
         
-        // Обновление сообщений
+         // Обновление сообщений
         const updatedClanData = await clansCollection.findOne({ _id: clan._id });
         await updateClanMessages(interaction.client, updatedClanData);
 
@@ -128,7 +127,6 @@ async function handleMemberLeave(interaction, clan, collection) {
 
 async function handleLeaderLeave(interaction, clan, collection) {
     const rosterLines = clan.roster ? clan.roster.split('\n').filter(l => l.trim()) : [];
-
     let newLeaderMember = null;
     let newLeaderData = {};
     let newLeaderIndex = -1;
@@ -138,10 +136,8 @@ async function handleLeaderLeave(interaction, clan, collection) {
         const line = rosterLines[i];
         const parts = line.split(',').map(p => p.trim());
         if (parts.length < 3) continue;
-
         const discordId = parts[2];
         const potentialMember = await interaction.guild.members.fetch(discordId).catch(() => null);
-
         if (potentialMember) {
             newLeaderMember = potentialMember;
             newLeaderData = { nick: parts[0], steamId: parts[1], discordId: parts[2] };
@@ -153,7 +149,6 @@ async function handleLeaderLeave(interaction, clan, collection) {
     // --- Сценарий 1: Преемник не найден (ростер пуст или все из ростера вышли с сервера). Клан расформировывается. ---
     if (!newLeaderMember) {
         await interaction.guild.roles.delete(clan.roleId).catch(e => console.error(`Не удалось удалить роль клана ${clan.tag}`, e));
-        
         if (clan.registryMessageId) {
             const registryChannel = await interaction.client.channels.fetch(config.CHANNELS.CLAN_REGISTRY).catch(() => null);
             if (registryChannel) await registryChannel.messages.delete(clan.registryMessageId).catch(() => {});
@@ -162,9 +157,10 @@ async function handleLeaderLeave(interaction, clan, collection) {
             const logChannel = await interaction.client.channels.fetch(config.REVIEW_CHANNEL_ID).catch(() => null);
             if (logChannel) await logChannel.messages.delete(clan.logMessageId).catch(() => {});
         }
-
         await collection.deleteOne({ _id: clan._id });
         await interaction.member.roles.remove(config.ROLES.CLAN_LEADER_ID).catch(() => {});
+        
+        await updateInsigniaPanel(interaction.client);
 
         await interaction.editReply({ content: `✅ Вы были последним активным участником. Клан **\`${clan.tag}\` ${clan.name}** был успешно расформирован.` });
         return;
@@ -172,7 +168,6 @@ async function handleLeaderLeave(interaction, clan, collection) {
 
     // --- Сценарий 2: Преемник найден. Передаем лидерство. ---
     rosterLines.splice(newLeaderIndex, 1);
-    
     const updatedClanDBData = {
         roster: rosterLines.join('\n'),
         creatorId: newLeaderMember.id,
@@ -182,18 +177,15 @@ async function handleLeaderLeave(interaction, clan, collection) {
         leader_steamid: newLeaderData.steamId,
     };
     await collection.updateOne({ _id: clan._id }, { $set: updatedClanDBData });
-    
+
     // Переназначаем роли
     await interaction.member.roles.remove(clan.roleId).catch(() => {});
     await interaction.member.roles.remove(config.ROLES.CLAN_LEADER_ID).catch(() => {});
     await newLeaderMember.roles.add(config.ROLES.CLAN_LEADER_ID).catch(() => {});
-    
     const finalClanData = await collection.findOne({ _id: clan._id });
     await updateClanMessages(interaction.client, finalClanData);
-
     await interaction.editReply({ content: `✅ Вы покинули клан. Лидерство было успешно передано <@${newLeaderMember.id}>.` });
 }
-
 
 /**
  * Обновляет сообщения в реестре и логах
@@ -219,10 +211,8 @@ async function updateClanMessages(client, clanData) {
          try {
             const channel = await client.channels.fetch(config.REVIEW_CHANNEL_ID);
             const message = await channel.messages.fetch(clanData.logMessageId);
-            
             const author = { tag: clanData.creatorTag, iconURL: null }; 
             const role = { id: clanData.roleId };
-            
             const newLogEmbed = embeds.createLogEmbed(author, clanData, role);
             await message.edit({ embeds: newLogEmbed.embeds });
         } catch (error) {
@@ -231,8 +221,48 @@ async function updateClanMessages(client, clanData) {
     }
 }
 
+/**
+ * Находим и обновляем сообщение с панелью для получения нашивок
+ * @param {import('discord.js').Client} client 
+ */
+async function updateInsigniaPanel(client) {
+    console.log('🔄 Запущено обновление панели нашивок...');
+    try {
+        const state = await getState();
+        const panelConfig = state.insigniaPanel;
+
+        if (!panelConfig || !panelConfig.channelId || !panelConfig.messageId) {
+            console.warn('[ПРЕДУПРЕЖДЕНИЕ] Конфигурация панели нашивок не найдена в bot_state.json. Обновление пропущено. Используйте !insignia-setup.');
+            return;
+        }
+
+        const channel = await client.channels.fetch(panelConfig.channelId).catch(() => null);
+        if (!channel) {
+             console.error(`[ОШИБКА] Не удалось найти канал для панели нашивок с ID: ${panelConfig.channelId}`);
+             return;
+        }
+
+        const message = await channel.messages.fetch(panelConfig.messageId).catch(() => null);
+        if (!message) {
+            console.error(`[ОШИБКА] Не удалось найти сообщение для панели нашивок с ID: ${panelConfig.messageId}. Возможно, оно было удалено. Используйте !insignia-setup для создания нового.`);
+            return;
+        }
+
+        const clansCollection = getClansCollection();
+        const clans = await clansCollection.find({ status: 'approved' }).sort({ tag: 1 }).toArray();
+
+        const newPanelData = insigniaEmbeds.createInsigniaEmbed(clans);
+        await message.edit(newPanelData);
+        
+        console.log('✅ Панель нашивок успешно обновлена.');
+    } catch (error) {
+        console.error('❌ Произошла критическая ошибка при обновлении панели нашивок:', error);
+    }
+}
+
 module.exports = {
     handleSelect,
     handleModal,
     handleLeave,
+    updateInsigniaPanel,
 };

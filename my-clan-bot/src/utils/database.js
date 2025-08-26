@@ -12,7 +12,6 @@ if (!uri || !dbName) {
 const client = new MongoClient(uri);
 
 let db;
-let draftsCollection;
 let clansCollection;
 
 async function connectToDb() {
@@ -21,8 +20,7 @@ async function connectToDb() {
         console.log(`💾 Успешное подключение к MongoDB! База данных: "${dbName}"`);
         
         db = client.db(dbName);
-        draftsCollection = db.collection('clan_drafts'); // Коллекция для временных заявок
-        clansCollection = db.collection('clans');       // Коллекция для созданных кланов
+        clansCollection = db.collection('clans'); // Коллекция для созданных кланов
         
     } catch (error) {
         console.error('🔥 Не удалось подключиться к MongoDB.', error);
@@ -32,6 +30,5 @@ async function connectToDb() {
 
 module.exports = { 
     connectToDb,
-    getDraftsCollection: () => draftsCollection,
     getClansCollection: () => clansCollection
 };

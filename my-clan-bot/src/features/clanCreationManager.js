@@ -4,6 +4,7 @@ const modals = require('../components/modals/clanCreationModals');
 const { getClansCollection } = require('../utils/database');
 const { handleInteractionError } = require('../utils/errorHandler');
 const config = require('../config');
+const { updateInsigniaPanel } = require('./insigniaManager');
 
 const registrationSessions = new Map();
 
@@ -321,6 +322,8 @@ async function submitAndCreateClan(interaction, session) {
         registryMessageId: registryMessageId,
     };
     await clansCollection.insertOne(clanData);
+    
+    await updateInsigniaPanel(interaction.client);
     
     await interaction.editReply({ ...embeds.createSuccessEmbed(interaction, session.data, newRole), flags: [MessageFlags.Ephemeral] });
 }
