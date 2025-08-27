@@ -117,6 +117,41 @@ async function processInfoEdit(interaction, clan, collection) {
 async function processRosterEdit(interaction, clan, collection) {
     const newRosterText = interaction.fields.getTextInputValue('clan_roster');
 
+    // --- ПРОВЕРКА НА ДУБЛИКАТЫ И ФОРМАТ ВНУТРИ СПИСКА ---
+    const lines = newRosterText.split('\n').filter(line => line.trim() !== '');
+    const seenSteamIds = new Set();
+    const seenDiscordIds = new Set();
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const parts = line.split(',').map(p => p.trim());
+        if (parts.length !== 3 || !/^\d{17}$/.test(parts[1]) || !/^\d{17,19}$/.test(parts[2])) {
+            await interaction.editReply({
+                content: `❌ **Ошибка формата в строке ${i + 1}:** \`${line}\`\nОжидается: \`Никнейм, 17-значный SteamID, DiscordID\`. Пожалуйста, исправьте и попробуйте снова.`
+            });
+            return;
+        }
+
+        const [, steamId, discordId] = parts;
+
+        if (seenSteamIds.has(steamId)) {
+            await interaction.editReply({
+                content: `❌ **Ошибка!** Дубликат в списке. SteamID \`${steamId}\` встречается более одного раза.`
+            });
+            return;
+        }
+        seenSteamIds.add(steamId);
+
+        if (seenDiscordIds.has(discordId)) {
+            await interaction.editReply({
+                content: `❌ **Ошибка!** Дубликат в списке. Discord ID \`${discordId}\` (<@${discordId}>) встречается более одного раза.`
+            });
+            return;
+        }
+        seenDiscordIds.add(discordId);
+    }
+    // --- КОНЕЦ ПРОВЕРКИ ---
+
     // --- ПРОВЕРКА: Участники не должны состоять в других кланах ---
     const rosterCheck = await validateRosterMembers(newRosterText, clan._id);
     if (!rosterCheck.isValid) {
@@ -126,7 +161,7 @@ async function processRosterEdit(interaction, clan, collection) {
     // --- КОНЕЦ ПРОВЕРКИ ---
 
     const oldRosterLines = clan.roster ? clan.roster.split('\n').filter(l => l.trim()) : [];
-    const newRosterLines = newRosterText ? newRosterText.split('\n').filter(l => l.trim()) : [];
+    const newRosterLines = lines;
 
     const getDiscordId = line => line.split(',').map(p => p.trim())[2];
 

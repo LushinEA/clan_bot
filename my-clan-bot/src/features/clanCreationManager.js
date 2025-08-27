@@ -87,6 +87,12 @@ async function handleModalSubmit(interaction) {
                 const color = interaction.fields.getTextInputValue('clan_color');
                 const server = interaction.fields.getTextInputValue('clan_server');
 
+                // Сохраняем данные до валидации, чтобы они не терялись при ошибке
+                session.data.tag = tag;
+                session.data.name = name;
+                session.data.color = '#' + color.toUpperCase();
+                session.data.server = server;
+
                 // --- ВАЛИДАЦИЯ ---
                 const hexRegex = /^[0-9A-F]{6}$/i;
                 if (!hexRegex.test(color)) {
@@ -112,11 +118,6 @@ async function handleModalSubmit(interaction) {
                     return;
                 }
                 // --- КОНЕЦ ПРОВЕРКИ ---
-
-                session.data.tag = tag;
-                session.data.name = name;
-                session.data.color = '#' + color.toUpperCase();
-                session.data.server = server;
                 
                 if (session.isEditing) {
                     session.step = 2;
@@ -132,6 +133,11 @@ async function handleModalSubmit(interaction) {
                 const leaderSteamId = interaction.fields.getTextInputValue('leader_steamid');
                 const leaderDiscordId = interaction.user.id;
 
+                // Сохраняем данные до валидации
+                session.data.leader_nick = leaderNick;
+                session.data.leader_steamid = leaderSteamId;
+                session.data.leader_discordid = leaderDiscordId;
+
                 // --- ВАЛИДАЦИЯ ФОРМАТА SteamID64 ---
                 const steamIdRegex = /^\d{17}$/;
                 if (!steamIdRegex.test(leaderSteamId)) {
@@ -143,8 +149,6 @@ async function handleModalSubmit(interaction) {
                 }
 
                 // --- ПРОВЕРКА: Не состоит ли SteamID или Discord ID главы в другом клане ---
-                // Здесь мы проверяем, не занят ли указанный SteamID или Discord ID текущего пользователя
-                // в *любом* другом клане (не только тем, который он создает, что очевидно).
                 const existingLeaderClan = await findUserClan({ discordId: leaderDiscordId, steamId: leaderSteamId });
                 if (existingLeaderClan) {
                     await interaction.followUp({
@@ -153,11 +157,7 @@ async function handleModalSubmit(interaction) {
                     });
                     return;
                 }
-                // --- КОНЕЦ НОВОЙ ПРОВЕРКИ ---
-
-                session.data.leader_nick = leaderNick;
-                session.data.leader_steamid = leaderSteamId;
-                session.data.leader_discordid = leaderDiscordId;
+                // --- КОНЕЦ ПРОВЕРКИ ---
 
                 if (session.isEditing) {
                     session.step = 3;
@@ -170,11 +170,16 @@ async function handleModalSubmit(interaction) {
             }
             case 'clan_create_step3_modal': {
                 const roster = interaction.fields.getTextInputValue('clan_roster');
+                
+                // Сохраняем введенный текст в сессию
+                session.data.roster = roster;
 
                 // --- УСИЛЕННАЯ ВАЛИДАЦИЯ ФОРМАТА СОСТАВА ---
                 const lines = roster.split('\n').filter(line => line.trim() !== '');
                 const steamIdRegex = /^\d{17}$/;
                 const discordIdRegex = /^\d{17,19}$/;
+                const seenSteamIds = new Set();
+                const seenDiscordIds = new Set();
 
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i];
@@ -205,19 +210,35 @@ async function handleModalSubmit(interaction) {
                         });
                         return;
                     }
+
+                    // --- ПРОВЕРКА НА ДУБЛИКАТЫ ВНУТРИ СПИСКА ---
+                    if (seenSteamIds.has(steamId)) {
+                        await interaction.followUp({
+                            content: `❌ **Ошибка!** Дубликат в списке. SteamID \`${steamId}\` встречается более одного раза. Пожалуйста, удалите лишние записи.`,
+                            flags: [MessageFlags.Ephemeral]
+                        });
+                        return;
+                    }
+                    seenSteamIds.add(steamId);
+
+                    if (seenDiscordIds.has(discordId)) {
+                        await interaction.followUp({
+                            content: `❌ **Ошибка!** Дубликат в списке. Discord ID \`${discordId}\` (<@${discordId}>) встречается более одного раза. Пожалуйста, удалите лишние записи.`,
+                            flags: [MessageFlags.Ephemeral]
+                        });
+                        return;
+                    }
+                    seenDiscordIds.add(discordId);
+                    // --- КОНЕЦ ПРОВЕРКИ НА ДУБЛИКАТЫ ---
                 }
                 
                 // --- ПРОВЕРКА: Членство участников в других кланах ---
-                // Здесь проверяем, что ни один из добавленных участников не состоит уже в другом клане.
-                // Передаем `null` для `clanIdToExclude`, так как это создание нового клана.
                 const rosterCheck = await validateRosterMembers(roster);
                 if (!rosterCheck.isValid) {
                     await interaction.followUp({ content: rosterCheck.message, flags: [MessageFlags.Ephemeral] });
                     return;
                 }
                 // --- КОНЕЦ ПРОВЕРКИ ---
-
-                session.data.roster = roster;
 
                 if (session.isEditing) {
                     session.isEditing = false;
@@ -307,12 +328,14 @@ async function submitAndCreateClan(interaction, session) {
     }
     
     const memberIds = new Set([interaction.user.id]);
-    const rosterLines = session.data.roster.split('\n').filter(l => l.trim());
-    for (const line of rosterLines) {
-        const parts = line.split(',').map(p => p.trim());
-        const discordId = parts[2];
-        if (discordId && /^\d{17,19}$/.test(discordId)) {
-            memberIds.add(discordId);
+    if (session.data.roster) {
+        const rosterLines = session.data.roster.split('\n').filter(l => l.trim());
+        for (const line of rosterLines) {
+            const parts = line.split(',').map(p => p.trim());
+            const discordId = parts[2];
+            if (discordId && /^\d{17,19}$/.test(discordId)) {
+                memberIds.add(discordId);
+            }
         }
     }
 
