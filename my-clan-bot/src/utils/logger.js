@@ -1,10 +1,11 @@
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 
 const logDirectory = path.join(__dirname, '..', '..', 'logs');
+const LOG_RETENTION_DAYS = 14; // Храним логи 2 недели
 
-if (!fs.existsSync(logDirectory)) {
-    fs.mkdirSync(logDirectory);
+if (!require('fs').existsSync(logDirectory)) {
+    require('fs').mkdirSync(logDirectory);
 }
 
 // ANSI escape-коды для цветов в консоли
@@ -46,17 +47,17 @@ const log = (level, message) => {
     // --- Лог для консоли (с цветами) ---
     let levelColor = colors.reset;
     switch (level) {
-        case 'INFO':
-            levelColor = colors.fg.cyan;
+        case 'INFO': 
+            levelColor = colors.fg.cyan; 
             break;
-        case 'WARN':
+        case 'WARN': 
             levelColor = colors.fg.yellow;
             break;
-        case 'ERROR':
-            levelColor = colors.fg.red;
+        case 'ERROR': 
+            levelColor = colors.fg.red; 
             break;
-        case 'DEBUG':
-            levelColor = colors.fg.gray;
+        case 'DEBUG': 
+            levelColor = colors.fg.gray; 
             break;
     }
     const consoleMessage = `${colors.dim}[${timestamp}]${colors.reset} ${levelColor}[${levelUpper.padEnd(5)}]${colors.reset} ${message}`;
@@ -68,21 +69,16 @@ const log = (level, message) => {
         console.log(consoleMessage);
     }
 
-    // Запись в файл
-    fs.appendFile(getLogfileName(), fileMessage, (err) => {
+    require('fs').appendFile(getLogfileName(), fileMessage, (err) => {
         if (err) {
-            // Используем красный цвет для критической ошибки записи в лог
             console.error(`${colors.fg.red}CRITICAL: Failed to write to log file.${colors.reset}`, err);
         }
     });
 };
 
 const logger = {
-    /** Логирование информационных сообщений (голубой) */
     info: (message) => log('INFO', message),
-    /** Логирование предупреждений (желтый) */
     warn: (message) => log('WARN', message),
-    /** Логирование ошибок (красный) */
     error: (message, error) => {
         if (error) {
             const errorMessage = `${message}\n${error.stack || error}`;
@@ -91,8 +87,43 @@ const logger = {
             log('ERROR', message);
         }
     },
-    /** Логирование отладочной информации (серый) */
     debug: (message) => log('DEBUG', message),
 };
+
+/**
+ * Функция для очистки старых лог-файлов.
+ */
+async function cleanupOldLogs() {
+    logger.info('Запущена проверка и очистка старых логов...');
+    try {
+        const files = await fs.readdir(logDirectory);
+        const currentDate = new Date();
+
+        for (const file of files) {
+            const match = file.match(/^bot-(\d{4}-\d{2}-\d{2})\.log$/);
+            if (!match) continue;
+
+            const filePath = path.join(logDirectory, file);
+            const logDate = new Date(match[1]);
+            
+            const diffTime = currentDate - logDate;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays > LOG_RETENTION_DAYS) {
+                try {
+                    await fs.unlink(filePath);
+                    logger.warn(`Удален старый лог-файл: ${file} (возраст: ${diffDays} дней)`);
+                } catch (unlinkErr) {
+                    logger.error(`Не удалось удалить лог-файл ${file}:`, unlinkErr);
+                }
+            }
+        }
+        logger.info('Очистка старых логов завершена.');
+    } catch (err) {
+        logger.error('Произошла ошибка во время очистки логов:', err);
+    }
+}
+
+logger.cleanupOldLogs = cleanupOldLogs;
 
 module.exports = logger;
