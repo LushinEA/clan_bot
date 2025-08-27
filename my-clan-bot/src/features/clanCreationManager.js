@@ -176,9 +176,22 @@ async function handleModalSubmit(interaction) {
             }
             case 'clan_create_step3_modal': {
                 const roster = interaction.fields.getTextInputValue('clan_roster');
-                
-                // Сохраняем введенный текст в сессию
                 session.data.roster = roster;
+
+                // --- ПРОВЕРКА: Минимальное количество участников ---
+                const MINIMUM_MEMBERS = 5;
+                const rosterMemberCount = roster.split('\n').filter(line => line.trim() !== '').length;
+                const totalMemberCount = 1 + rosterMemberCount; // +1 это сам лидер
+
+                if (totalMemberCount < MINIMUM_MEMBERS) {
+                    await interaction.followUp({
+                        content: `❌ **Ошибка!** Минимальный состав клана — **${MINIMUM_MEMBERS}** человек (включая вас как главу).\n\nВ вашей заявке сейчас указано **${totalMemberCount}**. Пожалуйста, добавьте недостающих участников в список и нажмите кнопку "Заполнить состав" ещё раз.`,
+                        flags: [MessageFlags.Ephemeral]
+                    });
+                    return;
+                }
+                // --- КОНЕЦ ПРОВЕРКИ ---
+
                 logger.debug(`[Creation] Step 3 data (roster) from ${interaction.user.tag}: ${roster.split('\n').length} entries.`);
 
                 // --- УСИЛЕННАЯ ВАЛИДАЦИЯ ФОРМАТА СОСТАВА ---
