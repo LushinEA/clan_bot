@@ -6,15 +6,18 @@ const { handleInteractionError } = require('../utils/errorHandler');
 const config = require('../config');
 const { updateInsigniaPanel } = require('./insigniaManager');
 const { findUserClan, validateUniqueness, validateRosterMembers } = require('../utils/validationHelper');
+const logger = require('../utils/logger');
 
 const registrationSessions = new Map();
 
 async function start(interaction) {
     const userId = interaction.user.id;
+    logger.info(`[Creation] Пользователь ${interaction.user.tag} (${userId}) начал процесс регистрации клана.`);
 
     // --- ПРОВЕРКА: Состоит ли пользователь уже в клане ---
     const userClan = await findUserClan({ discordId: userId });
     if (userClan) {
+        logger.warn(`[Creation] Пользователь ${interaction.user.tag} уже состоит в клане "${userClan.tag}", попытка создать новый клан отклонена.`);
         await interaction.reply({
             content: `🛡️ Вы не можете создать новый клан, так как уже состоите в клане **\`${userClan.tag}\` ${userClan.name}**.`,
             flags: [MessageFlags.Ephemeral]
@@ -63,6 +66,7 @@ async function handleButton(interaction) {
                 await interaction.showModal(modals.createBasicInfoModal(session.data));
                 break;
             case 'clan_create_cancel':
+                logger.info(`[Creation] Пользователь ${interaction.user.tag} отменил регистрацию клана.`);
                 registrationSessions.delete(userId);
                 await interaction.update({ content: '✅ Регистрация клана отменена.', embeds: [], components: [] });
                 break;
@@ -92,6 +96,7 @@ async function handleModalSubmit(interaction) {
                 session.data.name = name;
                 session.data.color = '#' + color.toUpperCase();
                 session.data.server = server;
+                logger.debug(`[Creation] Step 1 data from ${interaction.user.tag}: ${JSON.stringify(session.data)}`);
 
                 // --- ВАЛИДАЦИЯ ---
                 const hexRegex = /^[0-9A-F]{6}$/i;
@@ -137,6 +142,7 @@ async function handleModalSubmit(interaction) {
                 session.data.leader_nick = leaderNick;
                 session.data.leader_steamid = leaderSteamId;
                 session.data.leader_discordid = leaderDiscordId;
+                logger.debug(`[Creation] Step 2 data from ${interaction.user.tag}: nick=${leaderNick}, steamid=${leaderSteamId}`);
 
                 // --- ВАЛИДАЦИЯ ФОРМАТА SteamID64 ---
                 const steamIdRegex = /^\d{17}$/;
@@ -173,6 +179,7 @@ async function handleModalSubmit(interaction) {
                 
                 // Сохраняем введенный текст в сессию
                 session.data.roster = roster;
+                logger.debug(`[Creation] Step 3 data (roster) from ${interaction.user.tag}: ${roster.split('\n').length} entries.`);
 
                 // --- УСИЛЕННАЯ ВАЛИДАЦИЯ ФОРМАТА СОСТАВА ---
                 const lines = roster.split('\n').filter(line => line.trim() !== '');
@@ -267,10 +274,12 @@ async function askForEmblem(interaction, session) {
     collector.on('collect', async i => {
         if (i.customId === 'clan_create_cancel') {
              messageCollector.stop('cancel');
+             logger.info(`[Creation] Пользователь ${interaction.user.tag} отменил регистрацию на шаге эмблемы.`);
              registrationSessions.delete(interaction.user.id);
              await i.update({ content: '✅ Регистрация клана отменена.', embeds: [], components: [] });
              return;
         }
+        logger.info(`[Creation] Пользователь ${interaction.user.tag} пропустил добавление эмблемы.`);
         session.data.emblem = null;
         messageCollector.stop();
         await i.update({ ...embeds.createFinalConfirmationEmbed(i, session) });
@@ -280,6 +289,7 @@ async function askForEmblem(interaction, session) {
         const attachment = m.attachments.first();
         if (attachment && attachment.contentType?.startsWith('image')) {
             session.data.emblem = attachment.url;
+            logger.info(`[Creation] Пользователь ${interaction.user.tag} загрузил эмблему: ${attachment.url}`);
             collector.stop();
             await interaction.editReply({ ...embeds.createFinalConfirmationEmbed(interaction, session) });
             await m.delete().catch(() => {});
@@ -289,6 +299,7 @@ async function askForEmblem(interaction, session) {
     collector.on('end', async (collected, reason) => {
         if (reason === 'cancel') return;
         if (reason === 'time' && messageCollector.collected.size === 0) {
+            logger.info(`[Creation] Время на загрузку эмблемы для ${interaction.user.tag} истекло. Эмблема пропущена.`);
             session.data.emblem = null;
             await interaction.editReply({ ...embeds.createFinalConfirmationEmbed(interaction, session) });
         }
@@ -298,6 +309,9 @@ async function askForEmblem(interaction, session) {
 async function submitAndCreateClan(interaction, session) {
     await interaction.deferUpdate({ flags: [MessageFlags.Ephemeral] });
     let newRole;
+    const user = interaction.user;
+    logger.info(`[Creation] Пользователь ${user.tag} подтвердил создание клана. Данные: ${JSON.stringify(session.data)}`);
+
     try {
         newRole = await interaction.guild.roles.create({
             name: session.data.tag,
@@ -305,8 +319,9 @@ async function submitAndCreateClan(interaction, session) {
             mentionable: false,
             reason: `Регистрация клана ${session.data.name}`
         });
+        logger.info(`[Creation] Создана роль "${newRole.name}" (ID: ${newRole.id}) для клана ${session.data.tag}.`);
     } catch (error) {
-        console.error('❌ Ошибка при создании роли:', error);
+        logger.error(`[Creation] Ошибка при создании роли для клана ${session.data.tag} от ${user.tag}:`, error);
         await interaction.editReply({ content: 'Не удалось создать роль. Проверьте права бота и корректность HEX-кода.', embeds: [], components: [] });
         return;
     }
@@ -321,10 +336,10 @@ async function submitAndCreateClan(interaction, session) {
         if (leaderRole) {
             await interaction.member.roles.add(leaderRole);
         } else {
-            console.warn(`[ПРЕДУПРЕЖДЕНИЕ] Роль лидера клана с ID ${config.ROLES.CLAN_LEADER_ID} не найдена.`);
+            logger.warn(`[ПРЕДУПРЕЖДЕНИЕ] Роль лидера клана с ID ${config.ROLES.CLAN_LEADER_ID} не найдена.`);
         }
     } catch (error) {
-        console.warn(`[ПРЕДУПРЕЖДЕНИЕ] Не удалось выдать роль лидера клана пользователю ${interaction.user.tag}.`, error);
+        logger.warn(`[ПРЕДУПРЕЖДЕНИЕ] Не удалось выдать роль лидера клана пользователю ${interaction.user.tag}.`, error);
     }
     
     const memberIds = new Set([interaction.user.id]);
@@ -352,7 +367,7 @@ async function submitAndCreateClan(interaction, session) {
         );
     }
     await Promise.allSettled(rolePromises);
-    console.log(`[РЕГИСТРАЦИЯ КЛАНА] Роль "${newRole.name}" выдана ${successCount} участникам. Не найдено на сервере: ${failCount}.`);
+    logger.info(`[Creation] Роль "${newRole.name}" выдана ${successCount} участникам. Не найдено на сервере: ${failCount}.`);
 
     let logMessageId = null;
     let registryMessageId = null;
@@ -363,7 +378,9 @@ async function submitAndCreateClan(interaction, session) {
             const reviewChannel = await interaction.guild.channels.fetch(reviewChannelId);
             const logMessage = await reviewChannel.send(embeds.createLogEmbed(interaction.user, session.data, newRole));
             logMessageId = logMessage.id;
-        } catch (error) { console.error(`!! Ошибка отправки лога в канал (ID: ${reviewChannelId}).`, error); }
+        } catch (error) { 
+            logger.error(`!! Ошибка отправки лога в канал (ID: ${reviewChannelId}).`, error); 
+        }
     }
     
     const registryChannelId = config.CHANNELS.CLAN_REGISTRY;
@@ -374,7 +391,7 @@ async function submitAndCreateClan(interaction, session) {
             const registryMessage = await registryChannel.send({ embeds: [registryEmbed] });
             registryMessageId = registryMessage.id;
         } catch (error) {
-            console.error(`!! Ошибка отправки сообщения в реестр кланов (ID: ${registryChannelId}).`, error);
+            logger.error(`!! Ошибка отправки сообщения в реестр кланов (ID: ${registryChannelId}).`, error);
         }
     }
     
@@ -389,10 +406,12 @@ async function submitAndCreateClan(interaction, session) {
         registryMessageId: registryMessageId,
     };
     await clansCollection.insertOne(clanData);
+    logger.info(`[Creation] Клан "${session.data.name}" (${session.data.tag}) успешно сохранен в БД.`);
     
     await updateInsigniaPanel(interaction.client);
     
     await interaction.editReply({ ...embeds.createSuccessEmbed(interaction, session.data, newRole), flags: [MessageFlags.Ephemeral] });
+    logger.info(`[Creation] Пользователь ${user.tag} успешно завершил регистрацию клана "${session.data.name}".`);
 }
 
 module.exports = {

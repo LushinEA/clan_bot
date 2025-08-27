@@ -1,5 +1,5 @@
 const { createMainEmbed } = require('../../components/embeds/clanCreationEmbeds');
-const { EMOJIS } = require('../../config');
+const logger = require('../../utils/logger');
 
 /**
  * Отправляет главное сообщение для начала регистрации кланов в указанный канал.
@@ -13,13 +13,13 @@ async function execute(message) {
     }
 
     try {
-        console.log(`${EMOJIS.MAGIC} Админ ${message.author.tag} вызвал команду !create-clan`);
+        logger.info(`Админ ${message.author.tag} вызвал команду !create-clan в канале #${message.channel.name}`);
         const messageData = createMainEmbed();
         await message.channel.send(messageData);
         await message.delete();
 
     } catch (error) {
-        console.error('Ошибка при выполнении команды !create-clan:', error);
+        logger.error(`Ошибка при выполнении команды !create-clan от ${message.author.tag}:`, error);
         await message.channel.send('❌ Произошла ошибка при отправке сообщения. Проверьте права бота в этом канале.');
     }
 }

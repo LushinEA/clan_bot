@@ -3,12 +3,21 @@ const clanCreationManager = require('../../features/clanCreationManager');
 const insigniaManager = require('../../features/insigniaManager');
 const clanManagementManager = require('../../features/clanManagementManager');
 const { handleInteractionError } = require('../../utils/errorHandler');
+const logger = require('../../utils/logger');
 
 module.exports = {
     name: Events.InteractionCreate,
     async execute(interaction, client) {
         try {
             if (!interaction.inGuild()) return;
+            
+            // Логирование всех взаимодействий для аудита
+            const user = interaction.user;
+            let details = `User: ${user.tag} (${user.id})`;
+            if (interaction.isCommand()) details += `, Command: /${interaction.commandName}`;
+            if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) details += `, CustomID: ${interaction.customId}`;
+            logger.info(`[Interaction] ${details}`);
+
 
             // --- Обработка кнопок ---
             if (interaction.isButton()) {

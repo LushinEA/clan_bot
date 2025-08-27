@@ -5,6 +5,7 @@ const modals = require('../components/modals/clanManagementModals');
 const config = require('../config');
 const { updateInsigniaPanel, updateClanMessages } = require('./insigniaManager');
 const { validateUniqueness, validateRosterMembers } = require('../utils/validationHelper');
+const logger = require('../utils/logger');
 
 
 async function handleButton(interaction) {
@@ -19,6 +20,7 @@ async function handleButton(interaction) {
     const clan = await clansCollection.findOne({ creatorId: interaction.user.id, guildId: interaction.guildId });
 
     if (!clan) {
+        logger.warn(`[Management] Лидер ${interaction.user.tag} попытался управлять кланом, но клан не найден в БД.`);
         await interaction.reply({ content: 'Не удалось найти ваш клан. Обратитесь к администрации.', flags: [MessageFlags.Ephemeral] });
         return;
     }
@@ -38,6 +40,7 @@ async function handleButton(interaction) {
                 await deleteClan(interaction, clan, clansCollection);
                 break;
             case `clan_manage_delete_cancel_${clan._id}`:
+                logger.info(`[Management] Лидер ${interaction.user.tag} отменил расформирование клана "${clan.tag}".`);
                 await interaction.update({ content: '✅ Расформирование клана отменено.', embeds: [], components: [] });
                 break;
         }
@@ -77,6 +80,9 @@ async function processInfoEdit(interaction, clan, collection) {
     const newName = interaction.fields.getTextInputValue('clan_name');
     const newColor = '#' + interaction.fields.getTextInputValue('clan_color').toUpperCase();
     const newServer = interaction.fields.getTextInputValue('clan_server');
+    const user = interaction.user;
+
+    logger.info(`[Management] Лидер ${user.tag} редактирует инфо клана "${clan.tag}". Новые данные: tag=${newTag}, name=${newName}, color=${newColor}, server=${newServer}`);
 
     // Валидация формата
     if (!/^[0-9A-F]{6}$/i.test(newColor.replace('#', ''))) {
@@ -99,7 +105,7 @@ async function processInfoEdit(interaction, clan, collection) {
         name: newTag,
         color: newColor,
         reason: `Обновление клана лидером ${interaction.user.tag}`
-    }).catch(e => console.error("Ошибка обновления роли:", e));
+    }).catch(e => logger.error(`[Management] Ошибка обновления роли для клана ${clan.tag}:`, e));
 
     // Обновляем данные в БД
     const updateData = { tag: newTag, name: newName, color: newColor, server: newServer };
@@ -116,6 +122,8 @@ async function processInfoEdit(interaction, clan, collection) {
 
 async function processRosterEdit(interaction, clan, collection) {
     const newRosterText = interaction.fields.getTextInputValue('clan_roster');
+    const user = interaction.user;
+    logger.info(`[Management] Лидер ${user.tag} редактирует состав клана "${clan.tag}".`);
 
     // --- ПРОВЕРКА НА ДУБЛИКАТЫ И ФОРМАТ ВНУТРИ СПИСКА ---
     const lines = newRosterText.split('\n').filter(line => line.trim() !== '');
@@ -185,6 +193,7 @@ async function processRosterEdit(interaction, clan, collection) {
     
     // Обновляем состав в БД
     await collection.updateOne({ _id: clan._id }, { $set: { roster: newRosterText } });
+    logger.info(`[Management] Обновление состава клана "${clan.tag}": Добавлено ${addedIds.length}, Удалено ${removedIds.length}.`);
 
     const updatedClan = await collection.findOne({ _id: clan._id });
     await updateClanMessages(interaction.client, updatedClan);
@@ -220,10 +229,12 @@ async function confirmDeletion(interaction, clan) {
 
 
 async function deleteClan(interaction, clan, collection) {
+    const user = interaction.user;
+    logger.warn(`[Management] Лидер ${user.tag} инициировал РАСФОРМИРОВАНИЕ клана "${clan.tag}" (ID: ${clan._id}, RoleID: ${clan.roleId}).`);
     await interaction.update({ content: `${config.EMOJIS.LOADING} Начинаю процесс расформирования...`, embeds: [], components: [] });
 
     // 1. Удаление роли
-    await interaction.guild.roles.delete(clan.roleId).catch(e => console.warn(`Не удалось удалить роль ${clan.tag}: ${e.message}`));
+    await interaction.guild.roles.delete(clan.roleId).catch(e => logger.warn(`[Management] Не удалось удалить роль ${clan.tag} (${clan.roleId}): ${e.message}`));
     
     // 2. Удаление сообщения из реестра
     if (clan.registryMessageId) {
@@ -242,11 +253,13 @@ async function deleteClan(interaction, clan, collection) {
     
     // 5. Удаление из БД
     await collection.deleteOne({ _id: clan._id });
+    logger.warn(`[Management] Клан "${clan.tag}" удален из БД.`);
 
     // 6. Обновление панели нашивок
     await updateInsigniaPanel(interaction.client);
     
     await interaction.editReply({ content: `✅ Клан **\`${clan.tag}\` ${clan.name}** был успешно расформирован.` });
+    logger.warn(`[Management] Клан "${clan.tag}" успешно расформирован по запросу ${user.tag}.`);
 }
 
 

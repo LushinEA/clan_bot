@@ -2,11 +2,12 @@ const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const { connectToDb } = require('./src/utils/database');
+const logger = require('./src/utils/logger');
 require('dotenv').config();
 
 // Проверка наличия токена перед запуском
 if (!process.env.BOT_TOKEN) {
-    console.error("🔥 КРИТИЧЕСКАЯ ОШИБКА: BOT_TOKEN не найден в файле .env! Бот не может быть запущен.");
+    logger.error("КРИТИЧЕСКАЯ ОШИБКА: BOT_TOKEN не найден в файле .env! Бот не может быть запущен.");
     process.exit(1);
 }
 
@@ -26,6 +27,7 @@ const prefix = '!';
 client.commands = new Collection();
 
 // --- Загрузка файлов команд ---
+logger.info('Загрузка текстовых команд...');
 const commandsPath = path.join(__dirname, 'src/commands');
 const commandFolders = fs.readdirSync(commandsPath);
 
@@ -37,13 +39,15 @@ for (const folder of commandFolders) {
         const command = require(filePath);
         if ('name' in command && 'execute' in command) {
             client.commands.set(command.name, command);
+            logger.info(`Команда "${command.name}" успешно загружена.`);
         } else {
-            console.log(`[ПРЕДУПРЕЖДЕНИЕ] В команде ${filePath} отсутствует "name" или "execute".`);
+            logger.warn(`В команде ${filePath} отсутствует "name" или "execute".`);
         }
     }
 }
 
 // --- Загрузка обработчиков событий ---
+logger.info('Загрузка обработчиков событий...');
 const eventsPath = path.join(__dirname, 'src/events');
 const eventFolders = fs.readdirSync(eventsPath);
 
@@ -58,6 +62,7 @@ for (const folder of eventFolders) {
         } else {
             client.on(event.name, (...args) => event.execute(...args, client));
         }
+        logger.info(`Событие "${event.name}" успешно загружено.`);
     }
 }
 
@@ -75,9 +80,10 @@ client.on('messageCreate', async (message) => {
     if (!command) return;
 
     try {
+        logger.info(`[TextCmd] Пользователь ${message.author.tag} (${message.author.id}) вызвал команду: !${commandName} с аргументами: [${args.join(', ')}]`);
         await command.execute(message, args);
     } catch (error) {
-        console.error(`Ошибка при выполнении текстовой команды "${commandName}":`, error);
+        logger.error(`Ошибка при выполнении текстовой команды "${commandName}" пользователем ${message.author.tag}:`, error);
         await message.reply({ content: 'При выполнении этой команды произошла ошибка!' });
     }
 });
@@ -89,6 +95,6 @@ client.on('messageCreate', async (message) => {
         await connectToDb();
         await client.login(process.env.BOT_TOKEN);
     } catch (error) {
-        console.error("🔥 Не удалось запустить бота:", error);
+        logger.error("Не удалось запустить бота:", error);
     }
 })();
