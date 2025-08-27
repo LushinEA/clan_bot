@@ -317,6 +317,7 @@ async function submitAndCreateClan(interaction, session) {
             name: session.data.tag,
             color: session.data.color,
             mentionable: false,
+            hoist: true, 
             reason: `Регистрация клана ${session.data.name}`
         });
         logger.info(`[Creation] Создана роль "${newRole.name}" (ID: ${newRole.id}) для клана ${session.data.tag}.`);
