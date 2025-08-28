@@ -38,7 +38,20 @@ const getLogfileName = () => {
  * @param {string} message - Сообщение для логирования.
  */
 const log = (level, message) => {
-    const timestamp = new Date().toISOString();
+    // Форматирование времени для MSK (ДД.ММ.ГГГГ ЧЧ:мм:сс) ---
+    const options = {
+        timeZone: 'Europe/Moscow',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    };
+    // Используем локаль 'ru-RU'
+    const timestamp = new Intl.DateTimeFormat('ru-RU', options).format(new Date()).replace(',', '');
+
     const levelUpper = level.toUpperCase();
 
     // --- Лог для файла (чистый текст) ---
