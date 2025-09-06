@@ -6,6 +6,7 @@ const config = require('../config');
 const { updateInsigniaPanel, updateClanMessages } = require('./insigniaManager');
 const { validateUniqueness, validateRosterMembers } = require('../utils/validationHelper');
 const logger = require('../utils/logger');
+const { addClanTag, removeClanTag } = require('../utils/nicknameManager');
 
 
 async function handleButton(interaction) {
@@ -76,6 +77,7 @@ async function handleModalSubmit(interaction) {
 }
 
 async function processInfoEdit(interaction, clan, collection) {
+    const oldTag = clan.tag;
     const newTag = interaction.fields.getTextInputValue('clan_tag');
     const newName = interaction.fields.getTextInputValue('clan_name');
     const newColor = '#' + interaction.fields.getTextInputValue('clan_color').toUpperCase();
@@ -91,7 +93,7 @@ async function processInfoEdit(interaction, clan, collection) {
      if (!Object.keys(config.SERVERS).includes(newServer)) {
         return interaction.editReply({ content: '❌ Неверный номер сервера.' });
     }
-    
+
     // --- ПРОВЕРКА: Уникальность, исключая текущий клан ---
     const uniquenessCheck = await validateUniqueness({ tag: newTag, name: newName, color: newColor }, clan._id);
     if (!uniquenessCheck.isValid) {
@@ -100,12 +102,8 @@ async function processInfoEdit(interaction, clan, collection) {
     }
     // --- КОНЕЦ ПРОВЕРКИ ---
     
-    // Обновляем роль в Discord
-    await interaction.guild.roles.edit(clan.roleId, {
-        name: newTag,
-        color: newColor,
-        reason: `Обновление клана лидером ${interaction.user.tag}`
-    }).catch(e => logger.error(`[Management] Ошибка обновления роли для клана ${clan.tag}:`, e));
+    await interaction.guild.roles.edit(clan.roleId, { name: newTag, color: newColor, reason: `Обновление клана лидером ${interaction.user.tag}` })
+        .catch(e => logger.error(`[Management] Ошибка обновления роли для клана ${clan.tag}:`, e));
 
     // Обновляем данные в БД
     const updateData = { tag: newTag, name: newName, color: newColor, server: newServer };
@@ -113,7 +111,24 @@ async function processInfoEdit(interaction, clan, collection) {
 
     const updatedClan = { ...clan, ...updateData };
     
-    // Обновляем все связанные сообщения
+    // Обновление никнеймов при смене тега
+    if (oldTag !== newTag) {
+        logger.info(`[Management] Тег клана изменился с "${oldTag}" на "${newTag}". Обновление никнеймов участников...`);
+        const memberIds = new Set([clan.creatorId]);
+        if (clan.roster) {
+            clan.roster.split('\n').filter(l => l.trim()).forEach(line => {
+                const discordId = line.split(',').map(p => p.trim())[2];
+                if (discordId) memberIds.add(discordId);
+            });
+        }
+        for (const id of memberIds) {
+            const member = await interaction.guild.members.fetch(id).catch(() => null);
+            if (member) {
+                await addClanTag(member, newTag); // addClanTag сам заменит старый тег
+            }
+        }
+    }
+
     await updateClanMessages(interaction.client, updatedClan);
     await updateInsigniaPanel(interaction.client);
     
@@ -134,26 +149,20 @@ async function processRosterEdit(interaction, clan, collection) {
         const line = lines[i];
         const parts = line.split(',').map(p => p.trim());
         if (parts.length !== 3 || !/^\d{17}$/.test(parts[1]) || !/^\d{17,19}$/.test(parts[2])) {
-            await interaction.editReply({
-                content: `❌ **Ошибка формата в строке ${i + 1}:** \`${line}\`\nОжидается: \`Никнейм, 17-значный SteamID, DiscordID\`. Пожалуйста, исправьте и попробуйте снова.`
-            });
+            await interaction.editReply({ content: `❌ **Ошибка формата в строке ${i + 1}:** \`${line}\`\nОжидается: \`Никнейм, 17-значный SteamID, DiscordID\`. Пожалуйста, исправьте и попробуйте снова.` });
             return;
         }
 
         const [, steamId, discordId] = parts;
 
         if (seenSteamIds.has(steamId)) {
-            await interaction.editReply({
-                content: `❌ **Ошибка!** Дубликат в списке. SteamID \`${steamId}\` встречается более одного раза.`
-            });
+            await interaction.editReply({ content: `❌ **Ошибка!** Дубликат в списке. SteamID \`${steamId}\` встречается более одного раза.` });
             return;
         }
         seenSteamIds.add(steamId);
 
         if (seenDiscordIds.has(discordId)) {
-            await interaction.editReply({
-                content: `❌ **Ошибка!** Дубликат в списке. Discord ID \`${discordId}\` (<@${discordId}>) встречается более одного раза.`
-            });
+            await interaction.editReply({ content: `❌ **Ошибка!** Дубликат в списке. Discord ID \`${discordId}\` (<@${discordId}>) встречается более одного раза.` });
             return;
         }
         seenDiscordIds.add(discordId);
@@ -170,25 +179,28 @@ async function processRosterEdit(interaction, clan, collection) {
 
     const oldRosterLines = clan.roster ? clan.roster.split('\n').filter(l => l.trim()) : [];
     const newRosterLines = lines;
-
     const getDiscordId = line => line.split(',').map(p => p.trim())[2];
-
     const oldIds = new Set(oldRosterLines.map(getDiscordId).filter(Boolean));
     const newIds = new Set(newRosterLines.map(getDiscordId).filter(Boolean));
-    
     const addedIds = [...newIds].filter(id => !oldIds.has(id));
     const removedIds = [...oldIds].filter(id => !newIds.has(id));
 
-    // Выдаем роли новым участникам
+    // Выдаем роли и теги новым участникам
     for (const id of addedIds) {
         const member = await interaction.guild.members.fetch(id).catch(() => null);
-        if (member) await member.roles.add(clan.roleId);
+        if (member) {
+            await member.roles.add(clan.roleId);
+            await addClanTag(member, clan.tag);
+        }
     }
 
-    // Забираем роли у удаленных
+    // Забираем роли и теги у удаленных
     for (const id of removedIds) {
         const member = await interaction.guild.members.fetch(id).catch(() => null);
-        if (member) await member.roles.remove(clan.roleId);
+        if (member) {
+            await member.roles.remove(clan.roleId);
+            await removeClanTag(member);
+        }
     }
     
     // Обновляем состав в БД
@@ -204,24 +216,12 @@ async function processRosterEdit(interaction, clan, collection) {
 async function confirmDeletion(interaction, clan) {
     const embed = new EmbedBuilder()
         .setTitle(`Вы уверены, что хотите расформировать клан?`)
-        .setDescription(
-            `**Клан:** \`${clan.tag}\` ${clan.name}\n\n` +
-            `Это действие **НЕОБРАТИМО** и приведет к следующему:\n` +
-            `• Роль <@&${clan.roleId}> будет удалена.\n` +
-            `• Все записи о клане будут стерты из базы данных.\n` +
-            `• Сообщения в реестре и логах будут удалены.`
-        )
+        .setDescription(`**Клан:** \`${clan.tag}\` ${clan.name}\n\nЭто действие **НЕОБРАТИМО** и приведет к следующему:\n• Никнеймы всех участников будут очищены от клантега.\n• Роль <@&${clan.roleId}> будет удалена.\n• Все записи о клане будут стерты из базы данных.\n• Сообщения в реестре и логах будут удалены.`)
         .setColor(config.COLORS.DANGER);
     
     const buttons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId(`clan_manage_delete_confirm_${clan._id}`)
-            .setLabel('Да, расформировать')
-            .setStyle(ButtonStyle.Danger),
-        new ButtonBuilder()
-            .setCustomId(`clan_manage_delete_cancel_${clan._id}`)
-            .setLabel('Отмена')
-            .setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId(`clan_manage_delete_confirm_${clan._id}`).setLabel('Да, расформировать').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`clan_manage_delete_cancel_${clan._id}`).setLabel('Отмена').setStyle(ButtonStyle.Secondary)
     );
 
     await interaction.reply({ embeds: [embed], components: [buttons], flags: [MessageFlags.Ephemeral] });
@@ -233,6 +233,21 @@ async function deleteClan(interaction, clan, collection) {
     logger.warn(`[Management] Лидер ${user.tag} инициировал РАСФОРМИРОВАНИЕ клана "${clan.tag}" (ID: ${clan._id}, RoleID: ${clan.roleId}).`);
     await interaction.update({ content: `${config.EMOJIS.LOADING} Начинаю процесс расформирования...`, embeds: [], components: [] });
 
+    // 0. Собрать всех участников и убрать у них теги
+    const memberIds = new Set([clan.creatorId]);
+    if (clan.roster) {
+        clan.roster.split('\n').filter(l => l.trim()).forEach(line => {
+            const discordId = line.split(',').map(p => p.trim())[2];
+            if (discordId) memberIds.add(discordId);
+        });
+    }
+    for (const id of memberIds) {
+        const member = await interaction.guild.members.fetch(id).catch(() => null);
+        if (member) {
+            await removeClanTag(member);
+        }
+    }
+    
     // 1. Удаление роли
     await interaction.guild.roles.delete(clan.roleId).catch(e => logger.warn(`[Management] Не удалось удалить роль ${clan.tag} (${clan.roleId}): ${e.message}`));
     

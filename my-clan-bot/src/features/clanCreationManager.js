@@ -7,6 +7,7 @@ const config = require('../config');
 const { updateInsigniaPanel } = require('./insigniaManager');
 const { findUserClan, validateUniqueness, validateRosterMembers } = require('../utils/validationHelper');
 const logger = require('../utils/logger');
+const { addClanTag } = require('../utils/nicknameManager');
 
 const registrationSessions = new Map();
 
@@ -370,17 +371,22 @@ async function submitAndCreateClan(interaction, session) {
 
     let successCount = 0;
     let failCount = 0;
-    const rolePromises = [];
 
     for (const id of memberIds) {
-        rolePromises.push(
-            interaction.guild.members.fetch(id)
-                .then(member => member.roles.add(newRole))
-                .then(() => successCount++)
-                .catch(() => failCount++)
-        );
+        try {
+            const member = await interaction.guild.members.fetch(id);
+            if (member) {
+                await member.roles.add(newRole);
+                await addClanTag(member, session.data.tag); // <-- Добавление клантега
+                successCount++;
+            } else {
+                failCount++;
+            }
+        } catch {
+            failCount++;
+        }
     }
-    await Promise.allSettled(rolePromises);
+    
     logger.info(`[Creation] Роль "${newRole.name}" выдана ${successCount} участникам. Не найдено на сервере: ${failCount}.`);
 
     let logMessageId = null;

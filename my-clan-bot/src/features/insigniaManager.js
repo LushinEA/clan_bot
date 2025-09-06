@@ -8,6 +8,7 @@ const config = require('../config');
 const { getState } = require('../utils/stateManager');
 const { findUserClan } = require('../utils/validationHelper');
 const logger = require('../utils/logger');
+const { addClanTag, removeClanTag } = require('../utils/nicknameManager');
 
 async function handleSelect(interaction) {
     const clanRoleId = interaction.values[0];
@@ -50,18 +51,14 @@ async function handleModal(interaction) {
         // --- ВАЛИДАЦИЯ ---
         const steamIdRegex = /^\d{17}$/;
         if (!steamIdRegex.test(steamId)) {
-            await interaction.editReply({
-                content: '❌ **Ошибка!** Неверный формат SteamID64. Он должен состоять ровно из 17 цифр. Пожалуйста, попробуйте снова.',
-            });
+            await interaction.editReply({ content: '❌ **Ошибка!** Неверный формат SteamID64. Он должен состоять ровно из 17 цифр. Пожалуйста, попробуйте снова.' });
             return;
         }
 
         // --- ПРОВЕРКА: Состоит ли пользователь (по Discord ID или SteamID) уже в клане ---
         const existingClan = await findUserClan({ discordId, steamId });
         if (existingClan) {
-            await interaction.editReply({
-                content: `❌ **Ошибка!** Вы (или пользователь с указанным SteamID: \`${steamId}\`) уже состоите в клане **\`${existingClan.tag}\` ${existingClan.name}**.`,
-            });
+            await interaction.editReply({ content: `❌ **Ошибка!** Вы (или пользователь с указанным SteamID: \`${steamId}\`) уже состоите в клане **\`${existingClan.tag}\` ${existingClan.name}**.` });
             return;
         }
         // --- КОНЕЦ ПРОВЕРКИ ---
@@ -86,17 +83,16 @@ async function handleModal(interaction) {
         const role = await interaction.guild.roles.fetch(clanRoleId);
         if (role) {
             await interaction.member.roles.add(role);
+            await addClanTag(interaction.member, clan.tag);
         } else {
              throw new Error(`Роль с ID ${clanRoleId} не найдена на сервере!`);
         }
         
-         // Обновление сообщений
+        // Обновление сообщений
         const updatedClanData = await clansCollection.findOne({ _id: clan._id });
         await updateClanMessages(interaction.client, updatedClanData);
 
-        await interaction.editReply({
-            content: `✅ Поздравляем! Вы были приняты в клан **\`${clan.tag}\` ${clan.name}** и получили роль <@&${clan.roleId}>.`
-        });
+        await interaction.editReply({ content: `✅ Поздравляем! Вы были приняты в клан **\`${clan.tag}\` ${clan.name}** и получили роль <@&${clan.roleId}>.` });
 
     } catch (error) {
         await handleInteractionError(error, interaction, 'insigniaManager.handleModal');
@@ -116,9 +112,7 @@ async function handleLeave(interaction) {
             return;
         }
 
-        const isLeader = userClan.creatorId === interaction.user.id;
-
-        if (isLeader) {
+        if (userClan.creatorId === interaction.user.id) {
             await handleLeaderLeave(interaction, userClan, clansCollection);
         } else {
             await handleMemberLeave(interaction, userClan, clansCollection);
@@ -137,6 +131,7 @@ async function handleMemberLeave(interaction, clan, collection) {
     
     await collection.updateOne({ _id: clan._id }, { $set: { roster: updatedRoster } });
     await interaction.member.roles.remove(clan.roleId).catch(e => logger.error(`Не удалось снять роль ${clan.roleId} с ${interaction.user.tag}`, e));
+    await removeClanTag(interaction.member);
 
     const updatedClanData = await collection.findOne({ _id: clan._id });
     await updateClanMessages(interaction.client, updatedClanData);
@@ -170,6 +165,7 @@ async function handleLeaderLeave(interaction, clan, collection) {
     // --- Сценарий 1: Преемник не найден (ростер пуст или все из ростера вышли с сервера). Клан расформировывается. ---
     if (!newLeaderMember) {
         logger.warn(`[Insignia] Преемник для клана "${clan.tag}" не найден. Клан расформирован после ухода лидера ${user.tag}.`);
+        await removeClanTag(interaction.member);
         await interaction.guild.roles.delete(clan.roleId).catch(e => logger.error(`Не удалось удалить роль клана ${clan.tag}`, e));
         if (clan.registryMessageId) {
             const registryChannel = await interaction.client.channels.fetch(config.CHANNELS.CLAN_REGISTRY).catch(() => null);
@@ -201,6 +197,7 @@ async function handleLeaderLeave(interaction, clan, collection) {
     };
     await collection.updateOne({ _id: clan._id }, { $set: updatedClanDBData });
 
+    await removeClanTag(interaction.member);
     // Переназначаем роли
     await interaction.member.roles.remove(clan.roleId).catch(() => {});
     await interaction.member.roles.remove(config.ROLES.CLAN_LEADER_ID).catch(() => {});
